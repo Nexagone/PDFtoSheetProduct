@@ -15,7 +15,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copie du code source
-COPY app/ .
+COPY app/ /app/
+
+# Ajout du répertoire courant au PYTHONPATH
+ENV PYTHONPATH=/app
 
 # Exposition du port
 EXPOSE 8000

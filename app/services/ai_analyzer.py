@@ -7,7 +7,7 @@ import base64
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from ..models.product import ProductSheet
+from models.product import ProductSheet
 
 class AIAnalyzer:
     """Service d'analyse IA utilisant Ollama."""
@@ -20,7 +20,7 @@ class AIAnalyzer:
             ollama_url: URL du service Ollama
         """
         self.ollama_url = ollama_url
-        self.model = "llama3.2-vision:11b"
+        self.model = "llama2"  # Modèle par défaut
         self.prompt_template = """Analyse cette documentation produit et extrait les informations suivantes dans un format JSON structuré :
 - Nom du produit
 - Marque
@@ -58,14 +58,6 @@ Assure-toi que le JSON est correctement formaté et contient toutes les clés re
             Fiche produit structurée
         """
         try:
-            # Préparation des images pour l'API
-            image_data = []
-            for img in images[:3]:  # Limite à 3 images pour éviter les timeouts
-                buffered = io.BytesIO()
-                img.save(buffered, format="JPEG", quality=85)
-                img_str = base64.b64encode(buffered.getvalue()).decode()
-                image_data.append(img_str)
-
             # Construction du prompt avec contexte
             full_prompt = f"{self.prompt_template}\n\nMétadonnées du document:\n{json.dumps(metadata, indent=2)}\n\nTexte extrait:\n{text[:1000]}"  # Limite le texte pour éviter les timeouts
 
@@ -73,9 +65,20 @@ Assure-toi que le JSON est correctement formaté et contient toutes les clés re
             request_data = {
                 "model": self.model,
                 "prompt": full_prompt,
-                "images": image_data,
                 "stream": False
             }
+
+            # Si des images sont présentes, on utilise le modèle vision
+            if images:
+                self.model = "llama2-vision"
+                # Préparation des images pour l'API
+                image_data = []
+                for img in images[:3]:  # Limite à 3 images pour éviter les timeouts
+                    buffered = io.BytesIO()
+                    img.save(buffered, format="JPEG", quality=85)
+                    img_str = base64.b64encode(buffered.getvalue()).decode()
+                    image_data.append(img_str)
+                request_data["images"] = image_data
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(

@@ -5,9 +5,9 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from .services.pdf_processor import PDFProcessor
-from .services.ai_analyzer import AIAnalyzer
-from .models.product import ProductSheet
+from services.pdf_processor import PDFProcessor
+from services.ai_analyzer import AIAnalyzer
+from models.product import ProductSheet
 
 # Configuration des logs
 logger.add("app.log", rotation="500 MB")

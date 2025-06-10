@@ -23,7 +23,7 @@ API pour extraire automatiquement des fiches produit depuis des documents PDF en
 1. Clonez le dépôt :
 ```bash
 git clone <repository_url>
-cd pdf-product-extractor
+cd pdftosheetproduct
 ```
 
 2. Créez un fichier `.env` à partir du modèle :

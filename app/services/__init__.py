@@ -1,4 +1,4 @@
-from .pdf_processor import PDFProcessor
-from .ai_analyzer import AIAnalyzer
+from services.pdf_processor import PDFProcessor
+from services.ai_analyzer import AIAnalyzer
 
 __all__ = ['PDFProcessor', 'AIAnalyzer'] 
