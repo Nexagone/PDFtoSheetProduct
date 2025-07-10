@@ -1,0 +1,54 @@
+/* Styles personnalisés pour l'application */
+
+.drag-area {
+    border: 3px dashed #007bff;
+    border-radius: 15px;
+    padding: 60px 20px;
+    text-align: center;
+    background: #f8f9fa;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.drag-area.dragover {
+    background: #e3f2fd;
+    border-color: #2196f3;
+    transform: scale(1.02);
+}
+
+.drag-area i {
+    font-size: 3rem;
+    color: #007bff;
+    margin-bottom: 20px;
+}
+
+.progress-container {
+    display: none;
+    margin-top: 20px;
+}
+
+.result-container {
+    display: none;
+    margin-top: 20px;
+}
+
+.download-btn {
+    margin: 5px;
+}
+
+.file-info {
+    background: #e9ecef;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 10px 0;
+}
+
+.error-message {
+    display: none;
+    color: #dc3545;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 10px 0;
+} 
