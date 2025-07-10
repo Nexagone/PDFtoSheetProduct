@@ -1,0 +1,351 @@
+./<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur de Fiches Produit</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .drag-area {
+            border: 3px dashed #007bff;
+            border-radius: 15px;
+            padding: 60px 20px;
+            text-align: center;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .drag-area.dragover {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            transform: scale(1.02);
+        }
+        
+        .drag-area i {
+            font-size: 3rem;
+            color: #007bff;
+            margin-bottom: 20px;
+        }
+        
+        .progress-container {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .result-container {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .download-btn {
+            margin: 5px;
+        }
+        
+        .file-info {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        
+        .loading-spinner {
+            display: none;
+        }
+        
+        .error-message {
+            display: none;
+            color: #dc3545;
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="text-center mb-5">
+                    <h1 class="display-4 text-primary">
+                        <i class="fas fa-file-pdf"></i>
+                        Générateur de Fiches Produit
+                    </h1>
+                    <p class="lead text-muted">
+                        Transformez vos PDF constructeur en fiches produit professionnelles
+                    </p>
+                </div>
+
+                <!-- Zone de drag & drop -->
+                <div class="card shadow">
+                    <div class="card-body">
+                        <div class="drag-area" id="dragArea">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <h4>Glissez-déposez votre fichier PDF ici</h4>
+                            <p class="text-muted">ou cliquez pour sélectionner un fichier</p>
+                            <input type="file" id="fileInput" accept=".pdf" style="display: none;">
+                            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                                <i class="fas fa-folder-open"></i> Choisir un fichier
+                            </button>
+                        </div>
+
+                        <!-- Informations sur le fichier -->
+                        <div class="file-info" id="fileInfo" style="display: none;">
+                            <h5><i class="fas fa-file-pdf text-danger"></i> Fichier sélectionné</h5>
+                            <p id="fileName"></p>
+                            <p id="fileSize" class="text-muted"></p>
+                        </div>
+
+                        <!-- Options de sortie -->
+                        <div class="mt-4" id="outputOptions" style="display: none;">
+                            <h5>Options de sortie</h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="outputFormat" id="htmlOnly" value="html" checked>
+                                        <label class="form-check-label" for="htmlOnly">
+                                            <i class="fas fa-file-code"></i> HTML uniquement
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="outputFormat" id="pdfOnly" value="pdf">
+                                        <label class="form-check-label" for="pdfOnly">
+                                            <i class="fas fa-file-pdf"></i> PDF uniquement
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="outputFormat" id="bothFormats" value="both">
+                                        <label class="form-check-label" for="bothFormats">
+                                            <i class="fas fa-files-o"></i> HTML et PDF
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <button class="btn btn-success btn-lg" id="processBtn" onclick="processFile()">
+                                    <i class="fas fa-magic"></i> Générer la fiche produit
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Message d'erreur -->
+                        <div class="error-message" id="errorMessage"></div>
+
+                        <!-- Barre de progression -->
+                        <div class="progress-container" id="progressContainer">
+                            <h5><i class="fas fa-cogs"></i> Traitement en cours...</h5>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" style="width: 100%"></div>
+                            </div>
+                            <p class="text-muted mt-2">
+                                <i class="fas fa-info-circle"></i> 
+                                Analyse du PDF et génération de la fiche produit...
+                            </p>
+                        </div>
+
+                        <!-- Résultats -->
+                        <div class="result-container" id="resultContainer">
+                            <div class="alert alert-success">
+                                <h5><i class="fas fa-check-circle"></i> Fiche produit générée avec succès !</h5>
+                                <p id="productName"></p>
+                            </div>
+                            
+                            <div class="row" id="downloadButtons">
+                                <!-- Les boutons de téléchargement seront ajoutés ici -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instructions -->
+                <div class="card mt-4">
+                    <div class="card-body">
+                        <h5><i class="fas fa-info-circle text-info"></i> Comment ça marche ?</h5>
+                        <div class="row">
+                            <div class="col-md-4 text-center">
+                                <i class="fas fa-upload fa-2x text-primary mb-2"></i>
+                                <h6>1. Uploadez</h6>
+                                <p class="text-muted">Glissez-déposez votre PDF constructeur</p>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <i class="fas fa-brain fa-2x text-warning mb-2"></i>
+                                <h6>2. Analyse IA</h6>
+                                <p class="text-muted">Notre IA extrait les informations produit</p>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <i class="fas fa-download fa-2x text-success mb-2"></i>
+                                <h6>3. Téléchargez</h6>
+                                <p class="text-muted">Récupérez votre fiche produit HTML/PDF</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const dragArea = document.getElementById('dragArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const outputOptions = document.getElementById('outputOptions');
+        const progressContainer = document.getElementById('progressContainer');
+        const resultContainer = document.getElementById('resultContainer');
+        const errorMessage = document.getElementById('errorMessage');
+        const processBtn = document.getElementById('processBtn');
+        const productName = document.getElementById('productName');
+        const downloadButtons = document.getElementById('downloadButtons');
+
+        let selectedFile = null;
+
+        // Gestion du drag & drop
+        dragArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dragArea.classList.add('dragover');
+        });
+
+        dragArea.addEventListener('dragleave', () => {
+            dragArea.classList.remove('dragover');
+        });
+
+        dragArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        dragArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.includes('pdf')) {
+                showError('Veuillez sélectionner un fichier PDF');
+                return;
+            }
+
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = `Taille: ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+            
+            fileInfo.style.display = 'block';
+            outputOptions.style.display = 'block';
+            hideError();
+            hideResults();
+        }
+
+        async function processFile() {
+            if (!selectedFile) {
+                showError('Aucun fichier sélectionné');
+                return;
+            }
+
+            const outputFormat = document.querySelector('input[name="outputFormat"]:checked').value;
+            
+            showProgress();
+            hideError();
+            hideResults();
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('output_format', outputFormat);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showResults(result);
+                } else {
+                    showError(result.detail || 'Erreur lors du traitement');
+                }
+            } catch (error) {
+                showError('Erreur de connexion au serveur');
+                console.error('Error:', error);
+            } finally {
+                hideProgress();
+            }
+        }
+
+        function showProgress() {
+            progressContainer.style.display = 'block';
+            processBtn.disabled = true;
+        }
+
+        function hideProgress() {
+            progressContainer.style.display = 'none';
+            processBtn.disabled = false;
+        }
+
+        function showResults(result) {
+            productName.textContent = result.product_name;
+            
+            downloadButtons.innerHTML = '';
+            
+            if (result.outputs.html) {
+                const htmlBtn = createDownloadButton('HTML', result.outputs.html, 'btn-primary');
+                downloadButtons.appendChild(htmlBtn);
+            }
+            
+            if (result.outputs.pdf) {
+                const pdfBtn = createDownloadButton('PDF', result.outputs.pdf, 'btn-danger');
+                downloadButtons.appendChild(pdfBtn);
+            }
+            
+            resultContainer.style.display = 'block';
+        }
+
+        function createDownloadButton(label, filePath, btnClass) {
+            const col = document.createElement('div');
+            col.className = 'col-md-6';
+            
+            const btn = document.createElement('a');
+            btn.href = filePath;
+            btn.className = `btn ${btnClass} btn-lg download-btn w-100`;
+            btn.download = '';
+            btn.innerHTML = `<i class="fas fa-download"></i> Télécharger ${label}`;
+            
+            col.appendChild(btn);
+            return col;
+        }
+
+        function hideResults() {
+            resultContainer.style.display = 'none';
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function hideError() {
+            errorMessage.style.display = 'none';
+        }
+    </script>
+</body>
+</html> 

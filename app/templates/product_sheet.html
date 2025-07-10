@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fiche Produit - {{ product.product_name or 'Produit' }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+        
+        .product-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .product-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+        
+        .product-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .product-brand {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .specs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+        
+        .spec-item {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 10px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .spec-label {
+            font-weight: 600;
+            color: #007bff;
+            margin-bottom: 0.5rem;
+        }
+        
+        .spec-value {
+            font-size: 1.1rem;
+        }
+        
+        .features-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .features-list li {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #eee;
+            position: relative;
+            padding-left: 2rem;
+        }
+        
+        .features-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .certification-badge {
+            display: inline-block;
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            margin: 0.25rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .price-range {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        
+        .warranty-info {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+        }
+        
+        .description-box {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 10px;
+            border-left: 4px solid #6c757d;
+        }
+        
+        .dimensions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .dimension-item {
+            text-align: center;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .dimension-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .dimension-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        
+        .footer {
+            background: #343a40;
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+            margin-top: 3rem;
+        }
+        
+        @media print {
+            body {
+                background: white;
+            }
+            .product-header {
+                background: #007bff !important;
+                -webkit-print-color-adjust: exact;
+            }
+            .product-card {
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- En-tête du produit -->
+    <div class="product-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="product-title">{{ product.product_name or 'Nom du produit non spécifié' }}</h1>
+                    {% if product.brand %}
+                    <p class="product-brand">
+                        <i class="fas fa-tag"></i> {{ product.brand }}
+                    </p>
+                    {% endif %}
+                    {% if product.model_number %}
+                    <p class="product-brand">
+                        <i class="fas fa-barcode"></i> Réf: {{ product.model_number }}
+                    </p>
+                    {% endif %}
+                </div>
+                <div class="col-md-4 text-end">
+                    {% if product.category %}
+                    <span class="badge bg-light text-dark fs-6">{{ product.category }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Informations principales -->
+        <div class="product-card">
+            <div class="card-body p-4">
+                <div class="row">
+                    <!-- Caractéristiques techniques -->
+                    <div class="col-lg-8">
+                        <h3 class="mb-4">
+                            <i class="fas fa-cogs text-primary"></i> Caractéristiques techniques
+                        </h3>
+                        
+                        <div class="specs-grid">
+                            {% if product.technical_specs %}
+                                {% for key, value in product.technical_specs.items() %}
+                                    {% if value %}
+                                    <div class="spec-item">
+                                        <div class="spec-label">{{ key.replace('_', ' ').title() }}</div>
+                                        <div class="spec-value">{{ value }}</div>
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                            
+                            {% if product.weight %}
+                            <div class="spec-item">
+                                <div class="spec-label">Poids</div>
+                                <div class="spec-value">{{ product.weight }}</div>
+                            </div>
+                            {% endif %}
+                            
+                            {% if product.power_consumption %}
+                            <div class="spec-item">
+                                <div class="spec-label">Consommation électrique</div>
+                                <div class="spec-value">{{ product.power_consumption }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Dimensions -->
+                    <div class="col-lg-4">
+                        <h4 class="mb-3">
+                            <i class="fas fa-ruler-combined text-info"></i> Dimensions
+                        </h4>
+                        {% if product.dimensions %}
+                        <div class="dimensions-grid">
+                            {% for key, value in product.dimensions.items() %}
+                                {% if value %}
+                                <div class="dimension-item">
+                                    <div class="dimension-value">{{ value }}</div>
+                                    <div class="dimension-label">{{ key.title() }}</div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fonctionnalités et certifications -->
+        <div class="row">
+            <div class="col-lg-8">
+                {% if product.features %}
+                <div class="product-card">
+                    <div class="card-body p-4">
+                        <h3 class="mb-4">
+                            <i class="fas fa-star text-warning"></i> Fonctionnalités
+                        </h3>
+                        <ul class="features-list">
+                            {% for feature in product.features %}
+                            <li>{{ feature }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="col-lg-4">
+                {% if product.certifications %}
+                <div class="product-card">
+                    <div class="card-body p-4">
+                        <h4 class="mb-3">
+                            <i class="fas fa-certificate text-success"></i> Certifications
+                        </h4>
+                        {% for cert in product.certifications %}
+                        <span class="certification-badge">{{ cert }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if product.warranty %}
+                <div class="product-card mt-3">
+                    <div class="card-body p-4">
+                        <div class="warranty-info">
+                            <h5><i class="fas fa-shield-alt"></i> Garantie</h5>
+                            <p class="mb-0">{{ product.warranty }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Description -->
+        {% if product.description %}
+        <div class="product-card">
+            <div class="card-body p-4">
+                <h3 class="mb-4">
+                    <i class="fas fa-info-circle text-info"></i> Description
+                </h3>
+                <div class="description-box">
+                    {{ product.description }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Gamme de prix -->
+        {% if product.price_range %}
+        <div class="product-card">
+            <div class="card-body p-4">
+                <div class="price-range">
+                    <i class="fas fa-euro-sign"></i> Gamme de prix: {{ product.price_range }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Pied de page -->
+    <div class="footer">
+        <div class="container">
+            <p class="mb-0">
+                <i class="fas fa-file-pdf"></i> 
+                Fiche produit générée automatiquement - {{ product.product_name or 'Produit' }}
+            </p>
+            <small class="text-muted">
+                Généré automatiquement
+            </small>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
