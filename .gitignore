@@ -132,7 +132,6 @@ dmypy.json
 uploads/
 outputs/
 *.pdf
-*.html
 *.log
 
 # IDE
