@@ -11,6 +11,18 @@ services:
       - ollama_data:/root/.ollama
     environment:
       - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_DEBUG=INFO
+      - OLLAMA_GPU_LAYERS=35  # Utiliser GPU pour toutes les couches
+      - OLLAMA_FLASH_ATTENTION=true  # Optimisation de l'attention
+      - OLLAMA_NUM_PARALLEL=4  # Parallélisation
+      - OLLAMA_KEEP_ALIVE=5m  # Garder le modèle en mémoire
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     restart: unless-stopped
 
   # Application principale

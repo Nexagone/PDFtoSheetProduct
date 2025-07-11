@@ -19,10 +19,10 @@ echo Vérification du support GPU...
 docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi >nul 2>&1
 if %errorlevel% equ 0 (
     echo GPU NVIDIA détecté - Optimisations activées
-    set COMPOSE_FILE=docker-compose.windows.yml
+    set COMPOSE_FILE=docker compose.windows.yml
 ) else (
     echo GPU non détecté - Utilisation CPU
-    set COMPOSE_FILE=docker-compose.mac.yml
+    set COMPOSE_FILE=docker compose.mac.yml
 )
 
 echo.
@@ -31,10 +31,10 @@ echo Fichier de configuration: %COMPOSE_FILE%
 echo.
 
 REM Arrêter les conteneurs existants
-docker-compose -f %COMPOSE_FILE% down
+docker compose -f %COMPOSE_FILE% down
 
 REM Démarrer les services
-docker-compose -f %COMPOSE_FILE% up -d
+docker compose -f %COMPOSE_FILE% up -d
 
 echo.
 echo Services démarrés avec succès !
@@ -46,4 +46,4 @@ echo Appuyez sur une touche pour voir les logs...
 pause
 
 REM Afficher les logs
-docker-compose -f %COMPOSE_FILE% logs -f 
+docker compose -f %COMPOSE_FILE% logs -f 

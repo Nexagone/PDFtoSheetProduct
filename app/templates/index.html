@@ -245,6 +245,9 @@
                 return;
             }
 
+            // Nettoyage complet avant de traiter un nouveau fichier
+            resetState();
+            
             selectedFile = file;
             fileName.textContent = file.name;
             fileSize.textContent = `Taille: ${(file.size / 1024 / 1024).toFixed(2)} MB`;
@@ -255,13 +258,33 @@
             hideResults();
         }
 
+        function resetState() {
+            // Réinitialisation complète de l'état
+            selectedFile = null;
+            hideProgress();
+            hideError();
+            hideResults();
+            
+            // Réinitialisation du bouton de traitement
+            processBtn.disabled = false;
+            
+            // Nettoyage des boutons de téléchargement
+            downloadButtons.innerHTML = '';
+            
+            // Reset du nom du produit
+            productName.textContent = '';
+        }
+
         async function processFile() {
             if (!selectedFile) {
                 showError('Aucun fichier sélectionné');
                 return;
             }
 
+            console.log('Début du traitement du fichier:', selectedFile.name);
+            
             const outputFormat = document.querySelector('input[name="outputFormat"]:checked').value;
+            console.log('Format de sortie sélectionné:', outputFormat);
             
             showProgress();
             hideError();
@@ -272,21 +295,26 @@
             formData.append('output_format', outputFormat);
 
             try {
+                console.log('Envoi de la requête au serveur...');
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
 
+                console.log('Réponse reçue du serveur, status:', response.status);
                 const result = await response.json();
+                console.log('Résultat reçu:', result);
 
                 if (response.ok) {
                     showResults(result);
+                    console.log('Traitement terminé avec succès');
                 } else {
                     showError(result.detail || 'Erreur lors du traitement');
+                    console.error('Erreur du serveur:', result);
                 }
             } catch (error) {
                 showError('Erreur de connexion au serveur');
-                console.error('Error:', error);
+                console.error('Erreur de connexion:', error);
             } finally {
                 hideProgress();
             }
@@ -308,26 +336,26 @@
             downloadButtons.innerHTML = '';
             
             if (result.outputs.html) {
-                const htmlBtn = createDownloadButton('HTML', result.outputs.html, 'btn-primary');
+                const htmlBtn = createDownloadButton('HTML', result.session_id, 'fiche_produit_' + result.session_id + '.html', 'btn-primary');
                 downloadButtons.appendChild(htmlBtn);
             }
             
             if (result.outputs.pdf) {
-                const pdfBtn = createDownloadButton('PDF', result.outputs.pdf, 'btn-danger');
+                const pdfBtn = createDownloadButton('PDF', result.session_id, 'fiche_produit_' + result.session_id + '.pdf', 'btn-danger');
                 downloadButtons.appendChild(pdfBtn);
             }
             
             resultContainer.style.display = 'block';
         }
 
-        function createDownloadButton(label, filePath, btnClass) {
+        function createDownloadButton(label, sessionId, filename, btnClass) {
             const col = document.createElement('div');
             col.className = 'col-md-6';
             
             const btn = document.createElement('a');
-            btn.href = filePath;
+            btn.href = `/download/${sessionId}/${filename}`;
             btn.className = `btn ${btnClass} btn-lg download-btn w-100`;
-            btn.download = '';
+            btn.download = filename;
             btn.innerHTML = `<i class="fas fa-download"></i> Télécharger ${label}`;
             
             col.appendChild(btn);

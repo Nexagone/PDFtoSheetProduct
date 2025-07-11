@@ -11,7 +11,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Vérifier si Docker Compose est installé
-if ! command -v docker-compose &> /dev/null; then
+if ! command -v docker compose &> /dev/null; then
     echo "❌ Docker Compose n'est pas installé. Veuillez installer Docker Compose d'abord."
     exit 1
 fi
@@ -22,7 +22,7 @@ mkdir -p uploads outputs
 
 # Démarrer les services
 echo "🐳 Démarrage des services Docker..."
-docker-compose up -d
+docker compose up -d
 
 # Attendre que les services soient prêts
 echo "⏳ Attente du démarrage des services..."
@@ -53,9 +53,9 @@ echo "📚 Documentation API: http://localhost:8000/docs"
 echo "🔧 Ollama: http://localhost:11434"
 echo ""
 echo "📋 Commandes utiles:"
-echo "  - Voir les logs: docker-compose logs -f"
-echo "  - Arrêter: docker-compose down"
-echo "  - Redémarrer: docker-compose restart"
+echo "  - Voir les logs: docker compose logs -f"
+echo "  - Arrêter: docker compose down"
+echo "  - Redémarrer: docker compose restart"
 echo ""
 echo "⚠️  Note: Le premier démarrage peut prendre plusieurs minutes"
 echo "    pour télécharger le modèle Llama3." 

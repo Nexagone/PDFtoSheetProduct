@@ -11,7 +11,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Vérifier si Docker Compose est installé
-if ! command -v docker-compose &> /dev/null; then
+if ! command -v docker compose &> /dev/null; then
     echo "❌ Docker Compose n'est pas installé. Veuillez installer Docker Compose d'abord."
     exit 1
 fi
@@ -22,7 +22,7 @@ mkdir -p uploads outputs
 
 # Démarrer les services avec la configuration macOS
 echo "🐳 Démarrage des services Docker (macOS ARM64)..."
-docker-compose -f docker-compose.mac.yml up -d
+docker compose -f docker compose.mac.yml up -d
 
 # Attendre que les services soient prêts
 echo "⏳ Attente du démarrage des services..."
@@ -53,13 +53,13 @@ echo "📚 Documentation API: http://localhost:8000/docs"
 echo "🔧 Ollama: http://localhost:11434"
 echo ""
 echo "📋 Commandes utiles:"
-echo "  - Voir les logs: docker-compose -f docker-compose.mac.yml logs -f"
-echo "  - Arrêter: docker-compose -f docker-compose.mac.yml down"
-echo "  - Redémarrer: docker-compose -f docker-compose.mac.yml restart"
+echo "  - Voir les logs: docker compose -f docker compose.mac.yml logs -f"
+echo "  - Arrêter: docker compose -f docker compose.mac.yml down"
+echo "  - Redémarrer: docker compose -f docker compose.mac.yml restart"
 echo ""
 echo "⚠️  Note: Le premier démarrage peut prendre plusieurs minutes"
 echo "    pour télécharger le modèle Llama3."
 echo ""
 echo "💡 Conseil: Si vous rencontrez des problèmes de performance,"
 echo "    vous pouvez utiliser un modèle plus léger comme 'mistral'"
-echo "    en modifiant OLLAMA_MODEL dans docker-compose.mac.yml" 
+echo "    en modifiant OLLAMA_MODEL dans docker compose.mac.yml" 

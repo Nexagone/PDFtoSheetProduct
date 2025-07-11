@@ -38,6 +38,20 @@ templates = Jinja2Templates(directory="app/templates")
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
 
+def cleanup_outputs():
+    """Nettoie le dossier outputs au démarrage"""
+    try:
+        import shutil
+        if os.path.exists(settings.OUTPUT_DIR):
+            shutil.rmtree(settings.OUTPUT_DIR)
+        os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
+        logger.info("Dossier outputs nettoyé au démarrage")
+    except Exception as e:
+        logger.warning(f"Impossible de nettoyer le dossier outputs: {e}")
+
+# Nettoyage au démarrage
+cleanup_outputs()
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Page d'accueil avec interface drag & drop"""
