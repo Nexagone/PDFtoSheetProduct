@@ -1,68 +1,71 @@
 #!/bin/bash
 
-echo "🔍 Vérification de la configuration GPU pour Ollama..."
+echo "🔍 Vérification de la configuration GPU..."
 echo ""
 
-# Vérifier si nvidia-docker est installé
-echo "1. Vérification de nvidia-docker..."
-if command -v nvidia-docker &> /dev/null; then
-    echo "✅ nvidia-docker est installé"
-else
-    echo "❌ nvidia-docker n'est pas installé"
-    echo "   Installez-le avec: sudo apt-get install nvidia-docker2"
-fi
-
-# Vérifier les GPU disponibles
-echo ""
-echo "2. GPU disponibles:"
+# Vérifier les pilotes NVIDIA
+echo "📊 Pilotes NVIDIA:"
 if command -v nvidia-smi &> /dev/null; then
-    nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv,noheader,nounits
+    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader,nounits
 else
-    echo "❌ nvidia-smi n'est pas disponible"
+    echo "❌ nvidia-smi non trouvé - pilotes NVIDIA non installés"
 fi
 
-# Vérifier si Docker peut accéder aux GPU
 echo ""
-echo "3. Test d'accès GPU avec Docker..."
+
+# Vérifier nvidia-container-toolkit
+echo "📦 nvidia-container-toolkit:"
+if dpkg -l | grep -q nvidia-container-toolkit; then
+    echo "✅ Installé"
+else
+    echo "❌ Non installé"
+fi
+
+echo ""
+
+# Vérifier nvidia-docker2
+echo "📦 nvidia-docker2:"
+if dpkg -l | grep -q nvidia-docker2; then
+    echo "⚠️  Installé (peut être désinstallé avec ./uninstall-nvidia-docker2.sh)"
+else
+    echo "✅ Non installé"
+fi
+
+echo ""
+
+# Tester Docker avec GPU
+echo "🐳 Test Docker GPU:"
 if docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi &> /dev/null; then
     echo "✅ Docker peut accéder aux GPU"
 else
     echo "❌ Docker ne peut pas accéder aux GPU"
-    echo "   Vérifiez que nvidia-docker2 est installé et redémarrez Docker"
 fi
 
-# Vérifier l'état d'Ollama
 echo ""
-echo "4. État d'Ollama:"
+
+# Vérifier les conteneurs Ollama
+echo "🤖 Conteneurs Ollama:"
 if docker ps | grep -q ollama; then
-    echo "✅ Ollama est en cours d'exécution"
-    
-    # Vérifier les logs d'Ollama pour voir s'il utilise la GPU
-    echo ""
-    echo "5. Logs d'Ollama (dernières lignes):"
-    docker logs --tail 10 pdf_analyzer_ollama 2>/dev/null | grep -i "gpu\|cuda\|nvidia" || echo "   Aucune information GPU trouvée dans les logs"
-    
-    # Tester l'API Ollama
-    echo ""
-    echo "6. Test de l'API Ollama:"
-    if curl -s http://localhost:11434/api/tags &> /dev/null; then
-        echo "✅ API Ollama accessible"
-        
-        # Vérifier les modèles disponibles
-        echo ""
-        echo "7. Modèles disponibles:"
-        curl -s http://localhost:11434/api/tags | jq -r '.models[].name' 2>/dev/null || echo "   Impossible de récupérer les modèles"
-    else
-        echo "❌ API Ollama non accessible"
-    fi
+    echo "✅ Ollama en cours d'exécution"
+    docker ps --filter "name=ollama" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 else
-    echo "❌ Ollama n'est pas en cours d'exécution"
-    echo "   Lancez: docker compose up -d"
+    echo "❌ Ollama non démarré"
 fi
 
 echo ""
-echo "📋 Recommandations:"
-echo "   - Si nvidia-docker2 n'est pas installé: sudo apt-get install nvidia-docker2"
-echo "   - Redémarrez Docker après installation: sudo systemctl restart docker"
-echo "   - Relancez les services: docker compose down && docker compose up -d"
-echo "   - Vérifiez les logs: docker logs pdf_analyzer_ollama" 
+
+# Vérifier la configuration Docker
+echo "🔧 Configuration Docker:"
+if [ -f "/etc/docker/daemon.json" ]; then
+    echo "📋 Fichier de configuration Docker trouvé:"
+    cat /etc/docker/daemon.json | jq . 2>/dev/null || cat /etc/docker/daemon.json
+else
+    echo "📋 Aucun fichier de configuration Docker personnalisé"
+fi
+
+echo ""
+echo "📋 Commandes utiles:"
+echo "   - Installer GPU: sudo ./install-gpu-support.sh"
+echo "   - Désinstaller nvidia-docker2: sudo ./uninstall-nvidia-docker2.sh"
+echo "   - Démarrer Ollama manuellement: ./start-ollama-manual.sh"
+echo "   - Voir les logs: docker logs pdf_analyzer_ollama" 

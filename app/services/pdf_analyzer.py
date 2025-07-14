@@ -5,8 +5,10 @@ import json
 import asyncio
 import logging
 import re
-from typing import Dict, Any
+import aiofiles
+from typing import Dict, Any, List, Optional
 from pathlib import Path
+from datetime import datetime
 
 from app.config import settings
 
@@ -19,6 +21,15 @@ class PDFAnalyzer:
         self.timeout = settings.OLLAMA_TIMEOUT
         self.max_retries = settings.MAX_RETRIES
         self.retry_delay = settings.RETRY_DELAY
+        
+        # Configuration pour différents types de produits
+        self.product_type_keywords = {
+            "electromenager": ["four", "réfrigérateur", "lave-vaisselle", "micro-onde", "cuisinière", "frigo"],
+            "electronique": ["console", "ordinateur", "smartphone", "tablette", "téléviseur", "tv"],
+            "automobile": ["voiture", "véhicule", "auto", "moteur", "transmission"],
+            "mobilier": ["meuble", "chaise", "table", "armoire", "canapé"],
+            "outillage": ["perceuse", "scie", "marteau", "tournevis", "clé"]
+        }
 
     async def check_ollama_availability(self) -> bool:
         """Vérifie si Ollama est disponible"""
@@ -44,62 +55,246 @@ class PDFAnalyzer:
         return False
 
     def extract_text_from_pdf(self, pdf_path: Path) -> str:
-        """Extrait le texte d'un fichier PDF"""
+        """Extrait le texte d'un fichier PDF avec gestion d'erreurs améliorée"""
         try:
             logger.info(f"Début de l'extraction du texte du PDF: {pdf_path}")
-            print(f"=== DEBUG PDF === Début de l'extraction du texte du PDF: {pdf_path}", flush=True)
             
-            logger.info(f"Taille du fichier PDF: {pdf_path.stat().st_size} octets")
-            print(f"=== DEBUG PDF === Taille du fichier PDF: {pdf_path.stat().st_size} octets", flush=True)
+            if not pdf_path.exists():
+                raise FileNotFoundError(f"Le fichier PDF n'existe pas: {pdf_path}")
+            
+            file_size = pdf_path.stat().st_size
+            logger.info(f"Taille du fichier PDF: {file_size} octets")
+            
+            if file_size == 0:
+                raise ValueError("Le fichier PDF est vide")
+            
+            # Limite de taille pour éviter les problèmes de mémoire
+            if file_size > 50 * 1024 * 1024:  # 50MB
+                raise ValueError("Le fichier PDF est trop volumineux (> 50MB)")
+            
+            text_parts = []
             
             with open(pdf_path, 'rb') as file:
                 pdf_reader = PyPDF2.PdfReader(file)
-                logger.info(f"Nombre de pages dans le PDF: {len(pdf_reader.pages)}")
-                print(f"=== DEBUG PDF === Nombre de pages dans le PDF: {len(pdf_reader.pages)}", flush=True)
+                total_pages = len(pdf_reader.pages)
+                logger.info(f"Nombre de pages dans le PDF: {total_pages}")
                 
-                text = ""
+                if total_pages == 0:
+                    raise ValueError("Le PDF ne contient aucune page")
+                
                 for i, page in enumerate(pdf_reader.pages):
-                    page_text = page.extract_text()
-                    text += page_text
-                    logger.info(f"Page {i+1} extraite, longueur: {len(page_text)} caractères")
-                    print(f"=== DEBUG PDF === Page {i+1} extraite, longueur: {len(page_text)} caractères", flush=True)
-                    logger.info(f"Contenu de la page {i+1} (premiers 200 caractères): {page_text[:200]}")
-                    print(f"=== DEBUG PDF === Contenu de la page {i+1} (premiers 200 caractères): {page_text[:200]}", flush=True)
+                    try:
+                        page_text = page.extract_text()
+                        if page_text.strip():  # Seulement si la page contient du texte
+                            text_parts.append(page_text)
+                            logger.info(f"Page {i+1} extraite, longueur: {len(page_text)} caractères")
+                    except Exception as e:
+                        logger.warning(f"Erreur lors de l'extraction de la page {i+1}: {e}")
+                        continue
+                
+                full_text = "\n".join(text_parts)
+                
+                if not full_text.strip():
+                    raise ValueError("Aucun texte extractible trouvé dans le PDF")
+                
+                # Nettoyage du texte
+                full_text = self.clean_extracted_text(full_text)
                 
                 # Limiter la taille du texte pour éviter le troncage du prompt
-                max_text_length = 3000  # Limite pour laisser de la place au prompt
-                if len(text) > max_text_length:
-                    logger.warning(f"Texte tronqué de {len(text)} à {max_text_length} caractères")
-                    print(f"=== DEBUG PDF === Texte tronqué de {len(text)} à {max_text_length} caractères", flush=True)
-                    text = text[:max_text_length] + "..."
+                max_text_length = 8000  # Augmenté pour plus de contexte
+                if len(full_text) > max_text_length:
+                    logger.warning(f"Texte tronqué de {len(full_text)} à {max_text_length} caractères")
+                    full_text = full_text[:max_text_length] + "..."
                 
-                logger.info(f"Extraction terminée, texte total: {len(text)} caractères")
-                print(f"=== DEBUG PDF === Extraction terminée, texte total: {len(text)} caractères", flush=True)
-                logger.info(f"Texte extrait (premiers 500 caractères): {text[:500]}")
-                print(f"=== DEBUG PDF === Texte extrait (premiers 500 caractères): {text[:500]}", flush=True)
-                return text
+                logger.info(f"Extraction terminée, texte total: {len(full_text)} caractères")
+                return full_text
+                
         except Exception as e:
             logger.error(f"Erreur lors de l'extraction du PDF: {str(e)}", exc_info=True)
-            print(f"=== DEBUG PDF === Erreur lors de l'extraction du PDF: {str(e)}", flush=True)
             raise Exception(f"Erreur lors de l'extraction du PDF: {str(e)}")
 
+    def clean_extracted_text(self, text: str) -> str:
+        """Nettoie le texte extrait du PDF"""
+        # Suppression des caractères de contrôle
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x84\x86-\x9f]', '', text)
+        
+        # Normalisation des espaces
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Suppression des lignes vides multiples
+        text = re.sub(r'\n\s*\n', '\n', text)
+        
+        return text.strip()
+
+    def detect_product_type(self, text: str) -> str:
+        """Détecte le type de produit pour adapter l'extraction"""
+        text_lower = text.lower()
+        
+        for product_type, keywords in self.product_type_keywords.items():
+            for keyword in keywords:
+                if keyword in text_lower:
+                    logger.info(f"Type de produit détecté: {product_type}")
+                    return product_type
+        
+        logger.info("Type de produit non détecté, utilisation du template générique")
+        return "generic"
+
+    async def save_model_response(self, session_id: str, prompt: str, raw_response: str, parsed_data: Dict[str, Any], output_path: Path) -> None:
+        """Sauvegarde la réponse complète du modèle pour analyse"""
+        try:
+            # Créer le dossier de sauvegarde
+            backup_dir = output_path / "model_responses"
+            backup_dir.mkdir(exist_ok=True)
+            
+            # Nom du fichier avec timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{session_id}_{timestamp}_model_response.json"
+            file_path = backup_dir / filename
+            
+            # Données à sauvegarder
+            backup_data = {
+                "metadata": {
+                    "session_id": session_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "model": self.model,
+                    "filename": filename
+                },
+                "prompt": prompt,
+                "raw_response": raw_response,
+                "parsed_data": parsed_data,
+                "analysis_info": {
+                    "prompt_length": len(prompt),
+                    "response_length": len(raw_response),
+                    "parsed_fields_count": len(parsed_data),
+                    "model_used": self.model
+                }
+            }
+            
+            # Sauvegarder en JSON
+            async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
+                await f.write(json.dumps(backup_data, indent=2, ensure_ascii=False))
+            
+            logger.info(f"Réponse du modèle sauvegardée: {file_path}")
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la sauvegarde de la réponse du modèle: {str(e)}")
+
+    def create_structured_prompt(self, text: str) -> str:
+        """Crée un prompt structuré et optimisé pour l'analyse du texte"""
+        prompt = f"""Tu es un expert en analyse de fiches techniques produits. Tu dois analyser EXCLUSIVEMENT le texte fourni ci-dessous et extraire UNIQUEMENT les informations qui y sont explicitement mentionnées.
+
+⚠️ RÈGLES ABSOLUES :
+1. Ne JAMAIS inventer ou deviner d'informations
+2. Si une information n'est pas dans le texte, mettre ""
+3. Analyser UNIQUEMENT le contenu fourni
+4. RÉPONDRE OBLIGATOIREMENT EN FRANÇAIS - MÊME SI LE DOCUMENT EST EN ANGLAIS OU AUTRE LANGUE
+5. Être précis sur les unités (mm, cm, kg, W, V, etc.)
+6. TRADUIRE TOUTES LES INFORMATIONS EN FRANÇAIS - Ne jamais laisser de texte en anglais
+
+TEXTE À ANALYSER (analyse uniquement ce contenu) :
+{text}
+
+FORMAT DE RÉPONSE OBLIGATOIRE (JSON valide) :
+{{
+    "product_name": "Nom exact trouvé dans le texte (ou chaîne vide si pas trouvé)",
+    "brand": "Marque exacte trouvée dans le texte (ou chaîne vide si pas trouvé)",
+    "model_number": "Modèle/référence exact trouvé dans le texte (ou chaîne vide si pas trouvé)",
+    "category": "Catégorie exacte trouvée dans le texte (ou chaîne vide si pas trouvé)",
+    "description": "Description exacte trouvée dans le texte (ou chaîne vide si pas trouvé)",
+    "price_range": "Prix ou gamme de prix exacte trouvée dans le texte",
+    "technical_specs": {{
+        "power_consumption": "Consommation électrique exacte trouvée (W, watts, kW)",
+        "voltage": "Tension exacte trouvée (V, volts, 220V, 110V)",
+        "frequency": "Fréquence exacte trouvée (Hz, hertz, 50Hz, 60Hz)",
+        "capacity": "Capacité/volume exact trouvé (L, litres, m³)",
+        "efficiency_class": "Classe énergétique exacte trouvée (A+++, A++, A+, A, B, C, D)",
+        "noise_level": "Niveau sonore exact trouvé (dB, décibels)",
+        "speed": "Vitesse exacte trouvée (tr/min, rpm, km/h)",
+        "pressure": "Pression exacte trouvée (bar, Pa, kPa)",
+        "temperature_range": "Plage de température exacte trouvée (°C, °F)",
+        "material": "Matériaux exacts trouvés dans le texte",
+        "color": "Couleur exacte trouvée dans le texte",
+        "connectivity": "Connectivité exacte trouvée (WiFi, Bluetooth, USB, etc.)",
+        "display": "Écran/affichage exact trouvé dans le texte",
+        "memory": "Mémoire exacte trouvée (RAM, stockage, Go, To)",
+        "processor": "Processeur exact trouvé dans le texte",
+        "battery": "Batterie exacte trouvée dans le texte",
+        "operating_system": "Système d'exploitation exact trouvé"
+    }},
+    "dimensions": {{
+        "length": "Longueur exacte trouvée (mm, cm, m)",
+        "width": "Largeur exacte trouvée (mm, cm, m)",
+        "height": "Hauteur exacte trouvée (mm, cm, m)",
+        "depth": "Profondeur exacte trouvée (mm, cm, m)",
+        "diameter": "Diamètre exact trouvé (mm, cm, m)",
+        "overall": "Dimensions globales exactes trouvées (L x l x h)"
+    }},
+    "weight": "Poids exact trouvé (kg, g, tonnes)",
+    "features": [
+        "Fonctionnalité 1 trouvée dans le texte",
+        "Fonctionnalité 2 trouvée dans le texte"
+    ],
+    "certifications": [
+        "Certification 1 trouvée dans le texte",
+        "Certification 2 trouvée dans le texte"
+    ],
+    "warranty": "Garantie exacte trouvée dans le texte",
+    "installation_requirements": "Exigences d'installation exactes trouvées",
+    "maintenance": "Instructions de maintenance exactes trouvées",
+    "safety_features": "Fonctionnalités de sécurité exactes trouvées",
+    "accessories_included": "Accessoires inclus exacts trouvés",
+    "compatibility": "Compatibilité exacte trouvée dans le texte",
+    "environmental_conditions": "Conditions environnementales exactes trouvées",
+    "standards_compliance": "Conformité aux normes exactes trouvées",
+    "additional_info": "Autres informations exactes trouvées dans le texte"
+}}
+
+RÈGLES DE RECHERCHE PRÉCISES :
+- Cherche EXACTEMENT ces mots-clés : dimensions, poids, puissance, tension, fréquence, décibels, classe énergétique, garantie, certification, norme, accessoires, compatibilité
+- Si tu ne trouves PAS l'information dans le texte, mets ""
+- Ne génère JAMAIS de contenu qui n'est pas explicitement dans le texte fourni
+
+⚠️ INSTRUCTION FINALE OBLIGATOIRE :
+- RÉPONDS UNIQUEMENT EN FRANÇAIS
+- TRADUIS TOUTES LES INFORMATIONS EN FRANÇAIS
+- MÊME SI LE DOCUMENT SOURCE EST EN ANGLAIS, RÉPONDS EN FRANÇAIS
+- NE LAISSE AUCUN TEXTE EN ANGLAIS DANS TA RÉPONSE
+
+RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
+        return prompt
+
     def extract_json_from_text(self, text: str) -> str:
-        """Extrait le JSON de la réponse d'Ollama avec plusieurs méthodes"""
+        """Extrait le JSON de la réponse d'Ollama avec plusieurs méthodes améliorées"""
+        # Suppression des balises markdown
+        cleaned = text.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        
         # Méthode 1: Recherche directe de JSON
-        start = text.find('{')
-        end = text.rfind('}') + 1
+        start = cleaned.find('{')
+        end = cleaned.rfind('}') + 1
         if start != -1 and end > start:
-            json_candidate = text[start:end]
+            json_candidate = cleaned[start:end]
             try:
                 json.loads(json_candidate)
                 return json_candidate
             except json.JSONDecodeError:
                 pass
         
-        # Méthode 2: Recherche avec regex pour JSON mal formaté
-        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
-        matches = re.findall(json_pattern, text, re.DOTALL)
-        if matches:
+        # Méthode 2: Recherche avec regex améliorée
+        json_patterns = [
+            r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # JSON imbriqué
+            r'\{.*?\}',  # JSON simple
+            r'(\{[\s\S]*\})'  # JSON multilignes
+        ]
+        
+        for pattern in json_patterns:
+            matches = re.findall(pattern, cleaned, re.DOTALL)
             for match in matches:
                 try:
                     json.loads(match)
@@ -107,130 +302,151 @@ class PDFAnalyzer:
                 except json.JSONDecodeError:
                     continue
         
-        # Méthode 3: Essayer de nettoyer et reformater
-        cleaned_text = re.sub(r'[^\x20-\x7E]', '', text)  # Supprimer caractères non-ASCII
-        start = cleaned_text.find('{')
-        end = cleaned_text.rfind('}') + 1
-        if start != -1 and end > start:
-            return cleaned_text[start:end]
+        # Méthode 3: Tentative de réparation du JSON
+        return self.repair_json(cleaned)
+
+    def repair_json(self, json_str: str) -> str:
+        """Tente de réparer un JSON malformé"""
+        try:
+            # Corrections courantes
+            repaired = json_str
+            
+            # Supprimer les virgules en trop
+            repaired = re.sub(r',\s*}', '}', repaired)
+            repaired = re.sub(r',\s*]', ']', repaired)
+            
+            # Ajouter des guillemets manquants aux clés
+            repaired = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', repaired)
+            
+            # Essayer de parser
+            json.loads(repaired)
+            logger.info("JSON réparé avec succès")
+            return repaired
+            
+        except json.JSONDecodeError:
+            logger.warning("Impossible de réparer le JSON, retour d'un JSON vide")
+            return "{}"
+
+    def validate_extracted_data(self, data: Dict[str, Any], original_text: str) -> Dict[str, Any]:
+        """Valide les données extraites contre le texte original pour éviter les hallucinations"""
+        logger.info("Validation des données extraites")
         
-        raise ValueError("Aucun JSON valide trouvé dans la réponse")
-
-    def format_json_response(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Formate la réponse JSON avec des valeurs cohérentes"""
-        # Conversion des nombres en chaînes de caractères pour les dimensions
-        if "dimensions" in data:
-            for key in data["dimensions"]:
-                if isinstance(data["dimensions"][key], (int, float)):
-                    data["dimensions"][key] = f"{data['dimensions'][key]}mm"
+        # Mots-clés suspects (hallucinations courantes)
+        suspicious_keywords = [
+            "lorem ipsum", "example", "placeholder", "template",
+            "non spécifié", "à déterminer", "voir documentation",
+            "fournisseur de chaleur", "htr 3000", "système de chauffage à inertie"
+        ]
         
-        # Conversion du poids en chaîne avec unité
-        if "weight" in data and isinstance(data["weight"], (int, float)):
-            data["weight"] = f"{data['weight']}kg"
+        # Mots-clés anglais courants à détecter
+        english_keywords = [
+            "refrigerator", "freezer", "dishwasher", "washing machine", "oven", "microwave",
+            "side by side", "water dispenser", "ice dispenser", "energy class", "stainless steel",
+            "touch screen", "led display", "warranty", "years", "voltage", "frequency",
+            "power consumption", "capacity", "dimensions", "weight", "features", "certifications"
+        ]
         
-        # Conversion de la consommation électrique en chaîne avec unité
-        if "power_consumption" in data and isinstance(data["power_consumption"], (int, float)):
-            data["power_consumption"] = f"{data['power_consumption']}W"
+        def is_suspicious(value: str) -> bool:
+            if not value:
+                return False
+            value_lower = value.lower()
+            return any(keyword in value_lower for keyword in suspicious_keywords)
         
-        return data
+        def contains_english(value: str) -> bool:
+            if not value:
+                return False
+            value_lower = value.lower()
+            return any(keyword in value_lower for keyword in english_keywords)
+        
+        def validate_in_text(value: str, text: str) -> bool:
+            """Vérifie si une valeur existe dans le texte original"""
+            if not value or len(value) < 3:
+                return True  # Valeurs courtes acceptées
+            
+            # Recherche flexible (normalisation)
+            normalized_value = re.sub(r'[^\w\s]', '', value.lower())
+            normalized_text = re.sub(r'[^\w\s]', '', text.lower())
+            
+            # Découper en mots pour une recherche plus flexible
+            value_words = normalized_value.split()
+            if len(value_words) > 1:
+                # Si c'est une phrase, vérifier que la plupart des mots sont présents
+                found_words = sum(1 for word in value_words if word in normalized_text)
+                return found_words >= len(value_words) * 0.7
+            else:
+                return normalized_value in normalized_text
+        
+        validated_data = {}
+        english_detected = False
+        
+        for key, value in data.items():
+            if isinstance(value, str):
+                if is_suspicious(value) or not validate_in_text(value, original_text):
+                    validated_data[key] = ""
+                    logger.warning(f"Valeur suspecte supprimée pour {key}: {value}")
+                elif contains_english(value):
+                    validated_data[key] = value  # Garder la valeur mais logger l'alerte
+                    logger.warning(f"TEXTE ANGLAIS DÉTECTÉ pour {key}: {value}")
+                    english_detected = True
+                else:
+                    validated_data[key] = value
+                    
+            elif isinstance(value, list):
+                validated_list = []
+                for item in value:
+                    if isinstance(item, str) and not is_suspicious(item) and validate_in_text(item, original_text):
+                        if contains_english(item):
+                            logger.warning(f"TEXTE ANGLAIS DÉTECTÉ pour {key}: {item}")
+                            english_detected = True
+                        validated_list.append(item)
+                validated_data[key] = validated_list
+                
+            elif isinstance(value, dict):
+                validated_dict = {}
+                for subkey, subvalue in value.items():
+                    if isinstance(subvalue, str):
+                        if not is_suspicious(subvalue) and validate_in_text(subvalue, original_text):
+                            if contains_english(subvalue):
+                                logger.warning(f"TEXTE ANGLAIS DÉTECTÉ pour {key}.{subkey}: {subvalue}")
+                                english_detected = True
+                            validated_dict[subkey] = subvalue
+                        else:
+                            validated_dict[subkey] = ""
+                    else:
+                        validated_dict[subkey] = subvalue
+                validated_data[key] = validated_dict
+            else:
+                validated_data[key] = value
+        
+        if english_detected:
+            logger.error("⚠️  RÉPONSE EN ANGLAIS DÉTECTÉE - Le prompt doit être renforcé")
+        
+        return validated_data
 
-    def create_structured_prompt(self, text: str) -> str:
-        """Crée un prompt structuré pour l'analyse du texte"""
-        prompt = f"""Tu es un expert en analyse de fiches techniques produits. Tu dois analyser EXCLUSIVEMENT le texte fourni ci-dessous et extraire UNIQUEMENT les informations qui y sont explicitement mentionnées.
-
-⚠️ RÈGLE ABSOLUE : Ne jamais inventer ou deviner d'informations. Si une information n'est pas dans le texte, mets une chaîne vide "".
-
-TEXTE À ANALYSER (analyse uniquement ce contenu) :
-{text}
-
-INSTRUCTIONS STRICTES :
-1. Analyse UNIQUEMENT le texte fourni ci-dessus
-2. Ne fais AUCUNE supposition ou déduction
-3. Si une information n'est pas explicitement dans le texte, mets ""
-4. Pour chaque champ, cherche EXACTEMENT les mots-clés dans le texte
-5. Ne génère JAMAIS de contenu qui n'est pas dans le texte fourni
-6. Si le document fourni est dans une langue autre que le français, réponds en français.
-
-FORMAT DE RÉPONSE OBLIGATOIRE (JSON valide) :
-{{
-    "product_name": "Nom exact trouvé dans le texte (ou chaîne vide si pas trouvé)",
-    "brand": "Marque exacte trouvée dans le texte (ou chaîne vide si pas trouvé)",
-    "model": "Modèle/référence exact trouvé dans le texte (ou chaîne vide si pas trouvé)",
-    "category": "Catégorie exacte trouvée dans le texte (ou chaîne vide si pas trouvé)",
-    "description": "Description exacte trouvée dans le texte (ou chaîne vide si pas trouvé)",
-    "technical_specifications": {{
-        "dimensions": "Dimensions exactes trouvées (mm, cm, m, x, ×)",
-        "weight": "Poids exact trouvé (kg, g, poids)",
-        "power": "Puissance exacte trouvée (W, watts, puissance)",
-        "voltage": "Tension exacte trouvée (V, volts, tension)",
-        "frequency": "Fréquence exacte trouvée (Hz, hertz, fréquence)",
-        "capacity": "Capacité/volume exact trouvé",
-        "efficiency": "Classe énergétique exacte trouvée",
-        "noise_level": "Niveau sonore exact trouvé (dB, décibels, sonore)"
-    }},
-    "features": [
-        "Fonctionnalité 1 trouvée dans le texte",
-        "Fonctionnalité 2 trouvée dans le texte"
-    ],
-    "materials": "Matériaux exacts trouvés dans le texte",
-    "warranty": "Garantie exacte trouvée dans le texte",
-    "certifications": "Certifications exactes trouvées dans le texte",
-    "installation_requirements": "Exigences d'installation exactes trouvées",
-    "maintenance": "Instructions de maintenance exactes trouvées",
-    "safety_features": "Fonctionnalités de sécurité exactes trouvées",
-    "additional_info": "Autres informations exactes trouvées dans le texte"
-}}
-
-RÈGLES DE RECHERCHE PRÉCISES :
-- Cherche EXACTEMENT ces mots-clés dans le texte : "mm", "cm", "m", "x", "×", "kg", "g", "poids", "W", "watts", "puissance", "V", "volts", "tension", "Hz", "hertz", "fréquence", "dB", "décibels", "sonore"
-- Si tu ne trouves PAS l'information dans le texte, mets ""
-- Ne génère JAMAIS de contenu qui n'est pas explicitement dans le texte fourni
-
-RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
-        return prompt
-
-    async def analyze_with_ollama(self, text: str) -> Dict[str, Any]:
+    async def analyze_with_ollama(self, text: str, session_id: str = None, output_path: Path = None) -> Dict[str, Any]:
         """Analyse le texte avec Ollama pour extraire les informations produit"""
         logger.info(f"Début de l'analyse avec Ollama, texte à analyser: {len(text)} caractères")
-        print(f"=== DEBUG OLLAMA === Début de l'analyse avec Ollama, texte à analyser: {len(text)} caractères", flush=True)
-        
-        logger.info(f"Premiers 300 caractères du texte: {text[:300]}")
-        print(f"=== DEBUG OLLAMA === Premiers 300 caractères du texte: {text[:300]}", flush=True)
         
         prompt = self.create_structured_prompt(text)
         logger.info(f"Prompt créé, longueur: {len(prompt)} caractères")
-        print(f"=== DEBUG OLLAMA === Prompt créé, longueur: {len(prompt)} caractères", flush=True)
-        logger.info(f"Prompt complet: {prompt}")
-        print(f"=== DEBUG OLLAMA === Prompt complet: {prompt}", flush=True)
 
         retries = 0
         while retries < self.max_retries:
             try:
                 logger.info(f"Tentative {retries + 1}/{self.max_retries} d'analyse avec Ollama")
-                print(f"=== DEBUG OLLAMA === Tentative {retries + 1}/{self.max_retries} d'analyse avec Ollama", flush=True)
-                
-                logger.info(f"URL Ollama: {self.ollama_url}")
-                print(f"=== DEBUG OLLAMA === URL Ollama: {self.ollama_url}", flush=True)
-                
-                logger.info(f"Modèle utilisé: {self.model}")
-                print(f"=== DEBUG OLLAMA === Modèle utilisé: {self.model}", flush=True)
                 
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    logger.info("Envoi de la requête à Ollama")
-                    print("=== DEBUG OLLAMA === Envoi de la requête à Ollama", flush=True)
-                    
                     request_data = {
                         "model": self.model,
                         "prompt": prompt,
                         "stream": False,
                         "options": {
-                            "temperature": 0.1,  # Réponses plus cohérentes
+                            "temperature": 0.05,  # Très faible pour éviter les hallucinations
                             "top_p": 0.9,
-                            "num_predict": 2048
+                            "num_predict": 3000,
+                            "stop": ["```", "---", "RÉPONDS", "FORMAT"]  # Arrêter à ces tokens
                         }
                     }
-                    logger.info(f"Données de la requête: {request_data}")
-                    print(f"=== DEBUG OLLAMA === Données de la requête: {request_data}", flush=True)
                     
                     response = await client.post(
                         f"{self.ollama_url}/api/generate",
@@ -238,32 +454,38 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
                     )
                     response.raise_for_status()
                     result = response.json()
-                    logger.info("Réponse reçue d'Ollama")
-                    print("=== DEBUG OLLAMA === Réponse reçue d'Ollama", flush=True)
                     
-                    logger.info(f"Réponse complète d'Ollama: {result}")
-                    print(f"=== DEBUG OLLAMA === Réponse complète d'Ollama: {result}", flush=True)
+                    logger.info("Réponse reçue d'Ollama")
                     
                     try:
                         json_str = result["response"]
-                        logger.info(f"Réponse brute d'Ollama: {json_str}")
-                        print(f"=== DEBUG OLLAMA === Réponse brute d'Ollama: {json_str}", flush=True)
+                        logger.info(f"Réponse brute d'Ollama: {json_str[:200]}...")
                         
-                        # Utilisation de la nouvelle fonction de parsing
-                        data = self.parse_json_response(json_str)
-                        logger.info(f"Données extraites: {data}")
-                        print(f"=== DEBUG OLLAMA === Données extraites: {data}", flush=True)
+                        # Extraction et parsing du JSON
+                        clean_json = self.extract_json_from_text(json_str)
+                        data = json.loads(clean_json)
                         
-                        return data
+                        # Validation des données
+                        validated_data = self.validate_extracted_data(data, text)
+                        
+                        # Sauvegarder la réponse du modèle si session_id et output_path sont fournis
+                        if session_id and output_path:
+                            await self.save_model_response(session_id, prompt, json_str, validated_data, output_path)
+                        
+                        logger.info(f"Données extraites et validées: {len(validated_data)} champs")
+                        return validated_data
+                        
                     except Exception as e:
-                        logger.error(f"Erreur lors du parsing: {str(e)}", exc_info=True)
-                        print(f"=== DEBUG OLLAMA === Erreur lors du parsing: {str(e)}", flush=True)
+                        logger.error(f"Erreur lors du parsing: {str(e)}")
+                        
+                        # Sauvegarder même en cas d'erreur si session_id et output_path sont fournis
+                        if session_id and output_path:
+                            await self.save_model_response(session_id, prompt, json_str, {"error": str(e)}, output_path)
                         
                         # Si c'est la dernière tentative, essayer avec un prompt simplifié
                         if retries == self.max_retries - 1:
                             logger.info("Tentative avec un prompt simplifié...")
-                            print("=== DEBUG OLLAMA === Tentative avec un prompt simplifié...", flush=True)
-                            return await self.analyze_with_simple_prompt(text)
+                            return await self.analyze_with_simple_prompt(text, session_id, output_path)
                         
                         retries += 1
                         continue
@@ -284,18 +506,21 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
                 logger.error(f"Erreur lors de l'analyse: {str(e)}", exc_info=True)
                 raise Exception(f"Erreur lors de l'analyse: {str(e)}")
 
-    async def analyze_with_simple_prompt(self, text: str) -> Dict[str, Any]:
+    async def analyze_with_simple_prompt(self, text: str, session_id: str = None, output_path: Path = None) -> Dict[str, Any]:
         """Analyse avec un prompt simplifié en cas d'échec"""
-        simple_prompt = f"""Extrait les informations produit de ce texte et réponds avec un JSON simple:
+        simple_prompt = f"""Extrait les informations produit de ce texte et réponds avec un JSON simple en FRANÇAIS :
+
+IMPORTANT : RÉPONDS UNIQUEMENT EN FRANÇAIS, MÊME SI LE TEXTE EST EN ANGLAIS
+
 {{
-    "product_name": "nom du produit",
-    "brand": "marque",
-    "description": "description courte"
+    "product_name": "nom du produit en français",
+    "brand": "marque en français",
+    "description": "description courte en français"
 }}
 
-Texte: {text}
+Texte: {text[:2000]}
 
-JSON:"""
+JSON en français:"""
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -304,7 +529,8 @@ JSON:"""
                     json={
                         "model": self.model,
                         "prompt": simple_prompt,
-                        "stream": False
+                        "stream": False,
+                        "options": {"temperature": 0.1}
                     }
                 )
                 response.raise_for_status()
@@ -314,148 +540,95 @@ JSON:"""
                 parsed_json = json.loads(json_str)
                 
                 # Créer une structure complète avec les données disponibles
-                full_structure = {
-                    "product_name": parsed_json.get("product_name", ""),
-                    "brand": parsed_json.get("brand", ""),
-                    "model_number": "",
-                    "category": "",
-                    "technical_specs": {
-                        "volume": "",
-                        "classe_energetique": "",
-                        "capacite": "",
-                        "puissance": "",
-                        "tension": "",
-                        "frequence": ""
-                    },
-                    "dimensions": {
-                        "longueur": "",
-                        "largeur": "",
-                        "hauteur": "",
-                        "profondeur": ""
-                    },
-                    "weight": "",
-                    "power_consumption": "",
-                    "features": [],
-                    "warranty": "",
-                    "price_range": "",
-                    "description": parsed_json.get("description", ""),
-                    "color": "",
-                    "material": "",
-                    "certifications": []
-                }
+                validated_data = self.create_fallback_structure(parsed_json)
                 
-                return self.format_json_response(full_structure)
+                # Sauvegarder la réponse du modèle si session_id et output_path sont fournis
+                if session_id and output_path:
+                    await self.save_model_response(session_id, simple_prompt, json_str, validated_data, output_path)
+                
+                return validated_data
+                
         except Exception as e:
             logger.error(f"Erreur avec le prompt simplifié: {str(e)}")
-            # Retourner une structure vide en cas d'échec total
-            return {
-                "product_name": "",
-                "brand": "",
-                "model_number": "",
-                "category": "",
-                "technical_specs": {"volume": "", "classe_energetique": "", "capacite": "", "puissance": "", "tension": "", "frequence": ""},
-                "dimensions": {"longueur": "", "largeur": "", "hauteur": "", "profondeur": ""},
-                "weight": "",
-                "power_consumption": "",
-                "features": [],
-                "warranty": "",
-                "price_range": "",
-                "description": "",
-                "color": "",
-                "material": "",
-                "certifications": []
-            }
+            fallback_data = self.create_fallback_structure({})
+            
+            # Sauvegarder même en cas d'erreur si session_id et output_path sont fournis
+            if session_id and output_path:
+                await self.save_model_response(session_id, simple_prompt, "Erreur lors de l'analyse", fallback_data, output_path)
+            
+            return fallback_data
 
-    def parse_json_response(self, response_text: str) -> Dict[str, Any]:
-        """Parse la réponse JSON d'Ollama"""
-        logger.info(f"Parsing de la réponse JSON, longueur: {len(response_text)}")
-        print(f"=== DEBUG JSON === Parsing de la réponse JSON, longueur: {len(response_text)}", flush=True)
-        
-        # Nettoyage de la réponse
-        cleaned_response = response_text.strip()
-        
-        # Suppression des balises markdown si présentes
-        if cleaned_response.startswith("```json"):
-            cleaned_response = cleaned_response[7:]
-        if cleaned_response.endswith("```"):
-            cleaned_response = cleaned_response[:-3]
-        cleaned_response = cleaned_response.strip()
-        
-        logger.info(f"Réponse nettoyée: {cleaned_response[:200]}...")
-        print(f"=== DEBUG JSON === Réponse nettoyée: {cleaned_response[:200]}...", flush=True)
-        
-        try:
-            # Tentative de parsing direct
-            data = json.loads(cleaned_response)
-            logger.info("JSON parsé avec succès")
-            print("=== DEBUG JSON === JSON parsé avec succès", flush=True)
-            return data
-        except json.JSONDecodeError as e:
-            logger.warning(f"Erreur de parsing JSON: {e}")
-            print(f"=== DEBUG JSON === Erreur de parsing JSON: {e}", flush=True)
+    def create_fallback_structure(self, partial_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Crée une structure complète avec des données partielles"""
+        if partial_data is None:
+            partial_data = {}
             
-            # Tentative de récupération du JSON avec regex
-            import re
-            json_pattern = r'\{.*\}'
-            json_match = re.search(json_pattern, cleaned_response, re.DOTALL)
-            
-            if json_match:
-                try:
-                    json_str = json_match.group(0)
-                    data = json.loads(json_str)
-                    logger.info("JSON récupéré avec regex et parsé avec succès")
-                    print("=== DEBUG JSON === JSON récupéré avec regex et parsé avec succès", flush=True)
-                    return data
-                except json.JSONDecodeError as e2:
-                    logger.error(f"Échec du parsing avec regex: {e2}")
-                    print(f"=== DEBUG JSON === Échec du parsing avec regex: {e2}", flush=True)
-            
-            # Fallback: retourner un JSON vide avec la réponse brute
-            logger.error("Impossible de parser le JSON, utilisation du fallback")
-            print("=== DEBUG JSON === Impossible de parser le JSON, utilisation du fallback", flush=True)
-            return {
-                "error": "Impossible de parser la réponse JSON",
-                "raw_response": cleaned_response[:500],
-                "product_name": "",
-                "brand": "",
-                "model": "",
-                "category": "",
-                "description": "",
-                "technical_specifications": {
-                    "dimensions": "",
-                    "weight": "",
-                    "power": "",
-                    "voltage": "",
-                    "frequency": "",
-                    "capacity": "",
-                    "efficiency": "",
-                    "noise_level": ""
-                },
-                "features": [],
-                "materials": "",
-                "warranty": "",
-                "certifications": "",
-                "installation_requirements": "",
-                "maintenance": "",
-                "safety_features": "",
-                "additional_info": ""
-            }
+        return {
+            "product_name": partial_data.get("product_name", ""),
+            "brand": partial_data.get("brand", ""),
+            "model_number": partial_data.get("model_number", ""),
+            "category": partial_data.get("category", ""),
+            "description": partial_data.get("description", ""),
+            "price_range": partial_data.get("price_range", ""),
+            "technical_specs": partial_data.get("technical_specs", {}),
+            "dimensions": partial_data.get("dimensions", {}),
+            "weight": partial_data.get("weight", ""),
+            "features": partial_data.get("features", []),
+            "certifications": partial_data.get("certifications", []),
+            "warranty": partial_data.get("warranty", ""),
+            "installation_requirements": partial_data.get("installation_requirements", ""),
+            "maintenance": partial_data.get("maintenance", ""),
+            "safety_features": partial_data.get("safety_features", ""),
+            "accessories_included": partial_data.get("accessories_included", ""),
+            "compatibility": partial_data.get("compatibility", ""),
+            "environmental_conditions": partial_data.get("environmental_conditions", ""),
+            "standards_compliance": partial_data.get("standards_compliance", ""),
+            "additional_info": partial_data.get("additional_info", "")
+        }
 
-    def split_text(self, text: str, max_length: int = 3000) -> list:
-        """Découpe le texte en segments de taille max_length"""
-        return [text[i:i+max_length] for i in range(0, len(text), max_length)]
+    def split_text(self, text: str, max_length: int = 4000) -> list:
+        """Découpe le texte en segments avec chevauchement"""
+        if len(text) <= max_length:
+            return [text]
+        
+        segments = []
+        overlap = 200  # Chevauchement entre segments
+        start = 0
+        
+        while start < len(text):
+            end = start + max_length
+            
+            if end >= len(text):
+                segments.append(text[start:])
+                break
+            
+            # Chercher un point de coupure naturel
+            cut_point = text.rfind('\n', start, end)
+            if cut_point == -1:
+                cut_point = text.rfind('.', start, end)
+            if cut_point == -1:
+                cut_point = text.rfind(' ', start, end)
+            if cut_point == -1:
+                cut_point = end
+            
+            segments.append(text[start:cut_point])
+            start = max(cut_point - overlap, start + 1)
+        
+        return segments
 
     def merge_results(self, results: list) -> dict:
         """Fusionne les résultats JSON extraits de chaque segment"""
-        # On part du premier résultat comme base
         if not results:
-            return {}
-        merged = results[0].copy()
+            return self.create_fallback_structure()
         
-        for res in results[1:]:
+        if len(results) == 1:
+            return results[0]
+        
+        merged = self.create_fallback_structure()
+        
+        for res in results:
             for key, value in res.items():
-                if key not in merged:
-                    merged[key] = value
+                if not value:  # Ignorer les valeurs vides
                     continue
                     
                 current_value = merged[key]
@@ -476,109 +649,45 @@ JSON:"""
                     # Prendre la plus longue chaîne non vide
                     if value and (not current_value or len(value) > len(current_value)):
                         merged[key] = value
-                
-                # Si les types sont différents, prendre la valeur non vide la plus complète
-                else:
-                    if value and (not current_value or len(str(value)) > len(str(current_value))):
-                        merged[key] = value
         
         return merged
 
-    async def analyze_pdf(self, pdf_path: Path) -> Dict[str, Any]:
-        """Analyse complète d'un fichier PDF (multi-segments)"""
-        logger.info(f"=== DÉBUT ANALYSE PDF ===")
-        print("=== DEBUG ANALYSE === DÉBUT ANALYSE PDF", flush=True)
+    async def analyze_pdf(self, pdf_path: Path, session_id: str = None, output_path: Path = None) -> Dict[str, Any]:
+        """Analyse complète d'un fichier PDF"""
+        logger.info(f"=== DÉBUT ANALYSE PDF: {pdf_path} ===")
         
-        logger.info(f"Fichier PDF à analyser: {pdf_path}")
-        print(f"=== DEBUG ANALYSE === Fichier PDF à analyser: {pdf_path}", flush=True)
-        
-        logger.info(f"Fichier existe: {pdf_path.exists()}")
-        print(f"=== DEBUG ANALYSE === Fichier existe: {pdf_path.exists()}", flush=True)
-        
-        # Vérification de la disponibilité d'Ollama
-        logger.info("Vérification de la disponibilité d'Ollama...")
-        print("=== DEBUG ANALYSE === Vérification de la disponibilité d'Ollama...", flush=True)
-        if not await self.wait_for_ollama():
-            logger.error("Ollama n'est pas disponible")
-            print("=== DEBUG ANALYSE === Ollama n'est pas disponible", flush=True)
-            raise Exception("Ollama n'est pas disponible")
-        
-        # Extraction du texte
-        logger.info("Début de l'extraction du texte...")
-        print("=== DEBUG ANALYSE === Début de l'extraction du texte...", flush=True)
-        text = self.extract_text_from_pdf(pdf_path)
-        logger.info(f"Texte extrait avec succès, longueur: {len(text)} caractères")
-        print(f"=== DEBUG ANALYSE === Texte extrait avec succès, longueur: {len(text)} caractères", flush=True)
-        
-        # Découpage en segments
-        segments = self.split_text(text, 3000)
-        logger.info(f"Texte découpé en {len(segments)} segments de 3000 caractères max")
-        print(f"=== DEBUG ANALYSE === Texte découpé en {len(segments)} segments", flush=True)
-        
-        # Analyse chaque segment
-        results = []
-        for idx, segment in enumerate(segments):
-            logger.info(f"Analyse du segment {idx+1}/{len(segments)}")
-            print(f"=== DEBUG ANALYSE === Analyse du segment {idx+1}/{len(segments)}", flush=True)
-            res = await self.analyze_with_ollama(segment)
-            results.append(res)
-        
-        # Fusion des résultats
-        merged = self.merge_results(results)
-        logger.info(f"Analyse terminée, données fusionnées: {merged}")
-        print(f"=== DEBUG ANALYSE === Analyse terminée, données fusionnées: {merged}", flush=True)
-        
-        # Validation et nettoyage des hallucinations
-        validated_data = self.validate_and_clean_response(merged, text)
-        
-        logger.info("=== FIN ANALYSE PDF ===")
-        print("=== DEBUG ANALYSE === FIN ANALYSE PDF", flush=True)
-        return validated_data 
-
-    def validate_and_clean_response(self, data: dict, original_text: str) -> dict:
-        """Valide et nettoie la réponse pour éviter les hallucinations"""
-        logger.info("Validation de la réponse pour éviter les hallucinations")
-        print("=== DEBUG VALIDATION === Validation de la réponse", flush=True)
-        
-        # Liste des termes hallucinés courants à détecter
-        hallucination_terms = [
-            "Fournisseur de chaleur à inertie",
-            "HTR 3000",
-            "système de chauffage à inertie",
-            "applications industrielles",
-            "applications commerciales"
-        ]
-        
-        cleaned_data = data.copy()
-        
-        # Vérifier chaque champ pour détecter les hallucinations
-        for key, value in cleaned_data.items():
-            if isinstance(value, str) and value:
-                # Vérifier si la valeur contient des termes hallucinés
-                for term in hallucination_terms:
-                    if term.lower() in value.lower():
-                        logger.warning(f"Hallucination détectée dans {key}: {value}")
-                        print(f"=== DEBUG VALIDATION === Hallucination détectée dans {key}: {value}", flush=True)
-                        # Vérifier si le terme existe vraiment dans le texte original
-                        if term.lower() not in original_text.lower():
-                            cleaned_data[key] = ""
-                            logger.info(f"Champ {key} vidé car hallucination détectée")
-                            print(f"=== DEBUG VALIDATION === Champ {key} vidé", flush=True)
-                            break
+        try:
+            # Vérification de la disponibilité d'Ollama
+            if not await self.wait_for_ollama():
+                raise Exception("Ollama n'est pas disponible")
             
-            elif isinstance(value, list):
-                # Vérifier chaque élément de la liste
-                cleaned_list = []
-                for item in value:
-                    is_hallucination = False
-                    for term in hallucination_terms:
-                        if term.lower() in item.lower() and term.lower() not in original_text.lower():
-                            is_hallucination = True
-                            break
-                    if not is_hallucination:
-                        cleaned_list.append(item)
-                cleaned_data[key] = cleaned_list
-        
-        logger.info(f"Données validées: {cleaned_data}")
-        print(f"=== DEBUG VALIDATION === Données validées: {cleaned_data}", flush=True)
-        return cleaned_data 
+            # Extraction du texte
+            text = self.extract_text_from_pdf(pdf_path)
+            
+            # Détection du type de produit
+            product_type = self.detect_product_type(text)
+            
+            # Si le texte est court, analyser directement
+            if len(text) <= 4000:
+                result = await self.analyze_with_ollama(text, session_id, output_path)
+            else:
+                # Découpage en segments
+                segments = self.split_text(text, 4000)
+                logger.info(f"Texte découpé en {len(segments)} segments")
+                
+                # Analyse de chaque segment
+                results = []
+                for idx, segment in enumerate(segments):
+                    logger.info(f"Analyse du segment {idx+1}/{len(segments)}")
+                    res = await self.analyze_with_ollama(segment, session_id, output_path)
+                    results.append(res)
+                
+                # Fusion des résultats
+                result = self.merge_results(results)
+            
+            logger.info("=== FIN ANALYSE PDF ===")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de l'analyse: {e}")
+            raise

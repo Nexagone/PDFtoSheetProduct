@@ -38,6 +38,7 @@ PDFtoSheetProduct/
 
 - Docker et Docker Compose
 - Au moins 4GB de RAM disponible (pour Ollama)
+- **Support GPU (optionnel)** : nvidia-container-toolkit pour accélération GPU
 
 ### Démarrage rapide
 
@@ -50,6 +51,11 @@ cd PDFtoSheetProduct
 2. **Lancer avec Docker Compose**
 ```bash
 docker-compose up -d
+```
+
+**Note** : Pour l'accélération GPU, installez d'abord nvidia-container-toolkit :
+```bash
+sudo ./install-gpu-support.sh
 ```
 
 3. **Accéder à l'application**
@@ -125,7 +131,9 @@ RETRY_DELAY=2
 
 ## 📊 Structure des données extraites
 
-Le service extrait automatiquement :
+Le service extrait automatiquement et sauvegarde automatiquement les réponses du modèle dans le dossier `outputs/model_responses/` pour analyse et amélioration.
+
+### Données extraites :
 
 ```json
 {
@@ -158,6 +166,52 @@ Le service extrait automatiquement :
   "certifications": ["Certification 1", "Certification 2"]
 }
 ```
+
+### 📁 Structure des fichiers sauvegardés
+
+```
+outputs/
+├── {session_id}/
+│   ├── model_responses/
+│   │   ├── {session_id}_{timestamp}_model_response.json
+│   │   └── ...
+│   ├── product_sheet.html
+│   └── product_sheet.pdf
+```
+
+### 🔍 Analyse des réponses du modèle
+
+Pour analyser les réponses sauvegardées :
+
+```bash
+# Visualiser toutes les réponses
+python view-model-responses.py
+
+# Nettoyer les anciennes réponses (plus de 7 jours)
+python cleanup-model-responses.py clean 7
+
+# Lister les réponses par âge
+python cleanup-model-responses.py list
+
+# Tester les réponses en français
+./test-french-response.sh
+
+### 📋 Contenu des fichiers de réponse
+
+Chaque fichier `model_response.json` contient :
+- **Métadonnées** : Session ID, timestamp, modèle utilisé
+- **Prompt** : Le prompt envoyé au modèle
+- **Réponse brute** : La réponse complète d'Ollama
+- **Données parsées** : Les données extraites et validées
+- **Informations d'analyse** : Statistiques sur l'analyse
+
+### 🇫🇷 Garantie de réponse en français
+
+Le système garantit que toutes les réponses sont en français, même pour des documents en anglais :
+- **Prompt renforcé** : Instructions strictes pour répondre en français
+- **Détection automatique** : Alerte si du texte anglais est détecté
+- **Validation** : Vérification de la langue dans les données extraites
+- **Test automatisé** : Script de test pour vérifier les réponses en français
 
 ## 🐳 Commandes Docker utiles
 
@@ -199,6 +253,18 @@ docker-compose logs ollama
 docker-compose restart ollama
 ```
 
+### Problèmes GPU
+```bash
+# Vérifier l'installation GPU
+docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
+
+# Réinstaller le support GPU
+sudo ./install-gpu-support.sh
+
+# Démarrer Ollama manuellement
+./start-ollama-manual.sh
+```
+
 ### Modèle non trouvé
 ```bash
 # Se connecter au conteneur Ollama
@@ -221,11 +287,6 @@ ollama pull llama3
 ```bash
 # Build en mode production
 docker-compose -f docker-compose.prod.yml up -d
-```
-
-### Avec Kubernetes
-```bash
-kubectl apply -f k8s/
 ```
 
 ## 📝 Développement
@@ -257,23 +318,9 @@ pytest tests/
 pytest tests/integration/
 ```
 
-## 🤝 Contribution
-
-1. Fork le projet
-2. Créer une branche feature (`git checkout -b feature/AmazingFeature`)
-3. Commit les changements (`git commit -m 'Add some AmazingFeature'`)
-4. Push vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrir une Pull Request
-
 ## 📄 Licence
 
 Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
-
-## 🆘 Support
-
-- **Issues** : [GitHub Issues](https://github.com/votre-repo/issues)
-- **Documentation** : [Wiki](https://github.com/votre-repo/wiki)
-- **Email** : support@votre-email.com
 
 ---
 

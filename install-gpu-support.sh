@@ -10,11 +10,11 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Vérifier si nvidia-docker2 est déjà installé
-if dpkg -l | grep -q nvidia-docker2; then
-    echo "✅ nvidia-docker2 est déjà installé"
+# Vérifier si nvidia-container-toolkit est déjà installé
+if dpkg -l | grep -q nvidia-container-toolkit; then
+    echo "✅ nvidia-container-toolkit est déjà installé"
 else
-    echo "📦 Installation de nvidia-docker2..."
+    echo "📦 Installation de nvidia-container-toolkit..."
     
     # Ajouter le repository NVIDIA
     distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
@@ -25,13 +25,14 @@ else
     
     # Mettre à jour et installer
     apt-get update
-    apt-get install -y nvidia-container-toolkit nvidia-docker2
+    apt-get install -y nvidia-container-toolkit
     
-    echo "✅ nvidia-docker2 installé"
+    echo "✅ nvidia-container-toolkit installé"
 fi
 
-# Redémarrer Docker
-echo "🔄 Redémarrage de Docker..."
+# Configurer Docker pour utiliser nvidia runtime
+echo "🔧 Configuration du runtime nvidia pour Docker..."
+nvidia-ctk runtime configure --runtime=docker
 systemctl restart docker
 
 # Tester l'installation

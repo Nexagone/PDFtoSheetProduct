@@ -93,7 +93,7 @@ async def upload_pdf(
         
         # Analyse du PDF avec Ollama
         analyzer = PDFAnalyzer()
-        product_data = await analyzer.analyze_pdf(pdf_path)
+        product_data = await analyzer.analyze_pdf(pdf_path, session_id, output_path)
         
         logger.info(f"Données produit extraites: {product_data.get('product_name', 'N/A')}")
         
