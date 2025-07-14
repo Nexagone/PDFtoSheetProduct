@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "session_id": "550e8400-e29b-41d4-a716-446655440000",
+    "timestamp": "2025-01-15T14:30:25.123456",
+    "model": "llama3",
+    "filename": "550e8400-e29b-41d4-a716-446655440000_20250115_143025_model_response.json"
+  },
+  "prompt": "Tu es un expert en analyse de fiches techniques produits. Tu dois analyser EXCLUSIVEMENT le texte fourni ci-dessous et extraire UNIQUEMENT les informations qui y sont explicitement mentionnées.\n\n⚠️ RÈGLES ABSOLUES :\n1. Ne JAMAIS inventer ou deviner d'informations\n2. Si une information n'est pas dans le texte, mettre \"\"\n3. Analyser UNIQUEMENT le contenu fourni\n4. Répondre en français même si le document est dans une autre langue\n5. Être précis sur les unités (mm, cm, kg, W, V, etc.)\n6. Si le document fourni est dans une langue autre que le français, réponds en français.\n\nTEXTE À ANALYSER (analyse uniquement ce contenu) :\n[Contenu du PDF...]\n\nFORMAT DE RÉPONSE OBLIGATOIRE (JSON valide) :\n{\n    \"product_name\": \"Nom exact trouvé dans le texte (ou chaîne vide si pas trouvé)\",\n    \"brand\": \"Marque exacte trouvée dans le texte (ou chaîne vide si pas trouvé)\",\n    \"model_number\": \"Modèle/référence exact trouvé dans le texte (ou chaîne vide si pas trouvé)\",\n    \"category\": \"Catégorie exacte trouvée dans le texte (ou chaîne vide si pas trouvé)\",\n    \"description\": \"Description exacte trouvée dans le texte (ou chaîne vide si pas trouvé)\",\n    \"price_range\": \"Prix ou gamme de prix exacte trouvée dans le texte\",\n    \"technical_specs\": {\n        \"power_consumption\": \"Consommation électrique exacte trouvée (W, watts, kW)\",\n        \"voltage\": \"Tension exacte trouvée (V, volts, 220V, 110V)\",\n        \"frequency\": \"Fréquence exacte trouvée (Hz, hertz, 50Hz, 60Hz)\",\n        \"capacity\": \"Capacité/volume exact trouvé (L, litres, m³)\",\n        \"efficiency_class\": \"Classe énergétique exacte trouvée (A+++, A++, A+, A, B, C, D)\",\n        \"noise_level\": \"Niveau sonore exact trouvé (dB, décibels)\",\n        \"speed\": \"Vitesse exacte trouvée (tr/min, rpm, km/h)\",\n        \"pressure\": \"Pression exacte trouvée (bar, Pa, kPa)\",\n        \"temperature_range\": \"Plage de température exacte trouvée (°C, °F)\",\n        \"material\": \"Matériaux exacts trouvés dans le texte\",\n        \"color\": \"Couleur exacte trouvée dans le texte\",\n        \"connectivity\": \"Connectivité exacte trouvée (WiFi, Bluetooth, USB, etc.)\",\n        \"display\": \"Écran/affichage exact trouvé dans le texte\",\n        \"memory\": \"Mémoire exacte trouvée (RAM, stockage, Go, To)\",\n        \"processor\": \"Processeur exact trouvé dans le texte\",\n        \"battery\": \"Batterie exacte trouvée dans le texte\",\n        \"operating_system\": \"Système d'exploitation exact trouvé\"\n    },\n    \"dimensions\": {\n        \"length\": \"Longueur exacte trouvée (mm, cm, m)\",\n        \"width\": \"Largeur exacte trouvée (mm, cm, m)\",\n        \"height\": \"Hauteur exacte trouvée (mm, cm, m)\",\n        \"depth\": \"Profondeur exacte trouvée (mm, cm, m)\",\n        \"diameter\": \"Diamètre exact trouvé (mm, cm, m)\",\n        \"overall\": \"Dimensions globales exactes trouvées (L x l x h)\"\n    },\n    \"weight\": \"Poids exact trouvé (kg, g, tonnes)\",\n    \"features\": [\n        \"Fonctionnalité 1 trouvée dans le texte\",\n        \"Fonctionnalité 2 trouvée dans le texte\"\n    ],\n    \"certifications\": [\n        \"Certification 1 trouvée dans le texte\",\n        \"Certification 2 trouvée dans le texte\"\n    ],\n    \"warranty\": \"Garantie exacte trouvée dans le texte\",\n    \"installation_requirements\": \"Exigences d'installation exactes trouvées\",\n    \"maintenance\": \"Instructions de maintenance exactes trouvées\",\n    \"safety_features\": \"Fonctionnalités de sécurité exactes trouvées\",\n    \"accessories_included\": \"Accessoires inclus exacts trouvés\",\n    \"compatibility\": \"Compatibilité exacte trouvée dans le texte\",\n    \"environmental_conditions\": \"Conditions environnementales exactes trouvées\",\n    \"standards_compliance\": \"Conformité aux normes exactes trouvées\",\n    \"additional_info\": \"Autres informations exactes trouvées dans le texte\"\n}\n\nRÈGLES DE RECHERCHE PRÉCISES :\n- Cherche EXACTEMENT ces mots-clés : dimensions, poids, puissance, tension, fréquence, décibels, classe énergétique, garantie, certification, norme, accessoires, compatibilité\n- Si tu ne trouves PAS l'information dans le texte, mets \"\"\n- Ne génère JAMAIS de contenu qui n'est pas explicitement dans le texte fourni\n\nRÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS.",
+  "raw_response": "{\n    \"product_name\": \"Réfrigérateur Side by Side\",\n    \"brand\": \"Samsung\",\n    \"model_number\": \"RS68N8220S9\",\n    \"category\": \"Électroménager\",\n    \"description\": \"Réfrigérateur Side by Side avec distributeur d'eau et de glace\",\n    \"price_range\": \"\",\n    \"technical_specs\": {\n        \"power_consumption\": \"\",\n        \"voltage\": \"220-240V\",\n        \"frequency\": \"50Hz\",\n        \"capacity\": \"\",\n        \"efficiency_class\": \"A+++\",\n        \"noise_level\": \"\",\n        \"speed\": \"\",\n        \"pressure\": \"\",\n        \"temperature_range\": \"\",\n        \"material\": \"\",\n        \"color\": \"Inox\",\n        \"connectivity\": \"\",\n        \"display\": \"Écran tactile LED\",\n        \"memory\": \"\",\n        \"processor\": \"\",\n        \"battery\": \"\",\n        \"operating_system\": \"\"\n    },\n    \"dimensions\": {\n        \"length\": \"\",\n        \"width\": \"\",\n        \"height\": \"\",\n        \"depth\": \"\",\n        \"diameter\": \"\",\n        \"overall\": \"\"\n    },\n    \"weight\": \"\",\n    \"features\": [\n        \"Distributeur d'eau et de glace\",\n        \"Écran tactile LED\",\n        \"Classe énergétique A+++\",\n        \"Système de refroidissement Twin Cooling Plus\"\n    ],\n    \"certifications\": [\n        \"CE\",\n        \"RoHS\"\n    ],\n    \"warranty\": \"2 ans\",\n    \"installation_requirements\": \"\",\n    \"maintenance\": \"\",\n    \"safety_features\": \"\",\n    \"accessories_included\": \"\",\n    \"compatibility\": \"\",\n    \"environmental_conditions\": \"\",\n    \"standards_compliance\": \"\",\n    \"additional_info\": \"\"\n}",
+  "parsed_data": {
+    "product_name": "Réfrigérateur Side by Side",
+    "brand": "Samsung",
+    "model_number": "RS68N8220S9",
+    "category": "Électroménager",
+    "description": "Réfrigérateur Side by Side avec distributeur d'eau et de glace",
+    "price_range": "",
+    "technical_specs": {
+      "power_consumption": "",
+      "voltage": "220-240V",
+      "frequency": "50Hz",
+      "capacity": "",
+      "efficiency_class": "A+++",
+      "noise_level": "",
+      "speed": "",
+      "pressure": "",
+      "temperature_range": "",
+      "material": "",
+      "color": "Inox",
+      "connectivity": "",
+      "display": "Écran tactile LED",
+      "memory": "",
+      "processor": "",
+      "battery": "",
+      "operating_system": ""
+    },
+    "dimensions": {
+      "length": "",
+      "width": "",
+      "height": "",
+      "depth": "",
+      "diameter": "",
+      "overall": ""
+    },
+    "weight": "",
+    "features": [
+      "Distributeur d'eau et de glace",
+      "Écran tactile LED",
+      "Classe énergétique A+++",
+      "Système de refroidissement Twin Cooling Plus"
+    ],
+    "certifications": [
+      "CE",
+      "RoHS"
+    ],
+    "warranty": "2 ans",
+    "installation_requirements": "",
+    "maintenance": "",
+    "safety_features": "",
+    "accessories_included": "",
+    "compatibility": "",
+    "environmental_conditions": "",
+    "standards_compliance": "",
+    "additional_info": ""
+  },
+  "analysis_info": {
+    "prompt_length": 2847,
+    "response_length": 892,
+    "parsed_fields_count": 15,
+    "model_used": "llama3"
+  }
+} 

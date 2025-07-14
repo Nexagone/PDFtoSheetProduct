@@ -16,13 +16,7 @@ services:
       - OLLAMA_FLASH_ATTENTION=true  # Optimisation de l'attention
       - OLLAMA_NUM_PARALLEL=4  # Parallélisation
       - OLLAMA_KEEP_ALIVE=5m  # Garder le modèle en mémoire
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    runtime: nvidia
     restart: unless-stopped
 
   # Application principale
@@ -43,7 +37,6 @@ services:
     depends_on:
       - ollama
     restart: unless-stopped
-
 
   # Service pour télécharger le modèle Llama (optionnel)
   model-downloader:

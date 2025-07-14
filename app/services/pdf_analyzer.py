@@ -5,8 +5,10 @@ import json
 import asyncio
 import logging
 import re
+import aiofiles
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+from datetime import datetime
 
 from app.config import settings
 
@@ -137,6 +139,46 @@ class PDFAnalyzer:
         logger.info("Type de produit non détecté, utilisation du template générique")
         return "generic"
 
+    async def save_model_response(self, session_id: str, prompt: str, raw_response: str, parsed_data: Dict[str, Any], output_path: Path) -> None:
+        """Sauvegarde la réponse complète du modèle pour analyse"""
+        try:
+            # Créer le dossier de sauvegarde
+            backup_dir = output_path / "model_responses"
+            backup_dir.mkdir(exist_ok=True)
+            
+            # Nom du fichier avec timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{session_id}_{timestamp}_model_response.json"
+            file_path = backup_dir / filename
+            
+            # Données à sauvegarder
+            backup_data = {
+                "metadata": {
+                    "session_id": session_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "model": self.model,
+                    "filename": filename
+                },
+                "prompt": prompt,
+                "raw_response": raw_response,
+                "parsed_data": parsed_data,
+                "analysis_info": {
+                    "prompt_length": len(prompt),
+                    "response_length": len(raw_response),
+                    "parsed_fields_count": len(parsed_data),
+                    "model_used": self.model
+                }
+            }
+            
+            # Sauvegarder en JSON
+            async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
+                await f.write(json.dumps(backup_data, indent=2, ensure_ascii=False))
+            
+            logger.info(f"Réponse du modèle sauvegardée: {file_path}")
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la sauvegarde de la réponse du modèle: {str(e)}")
+
     def create_structured_prompt(self, text: str) -> str:
         """Crée un prompt structuré et optimisé pour l'analyse du texte"""
         prompt = f"""Tu es un expert en analyse de fiches techniques produits. Tu dois analyser EXCLUSIVEMENT le texte fourni ci-dessous et extraire UNIQUEMENT les informations qui y sont explicitement mentionnées.
@@ -145,9 +187,9 @@ class PDFAnalyzer:
 1. Ne JAMAIS inventer ou deviner d'informations
 2. Si une information n'est pas dans le texte, mettre ""
 3. Analyser UNIQUEMENT le contenu fourni
-4. Répondre en français même si le document est dans une autre langue
+4. RÉPONDRE OBLIGATOIREMENT EN FRANÇAIS - MÊME SI LE DOCUMENT EST EN ANGLAIS OU AUTRE LANGUE
 5. Être précis sur les unités (mm, cm, kg, W, V, etc.)
-6. Si le document fourni est dans une langue autre que le français, réponds en français.
+6. TRADUIRE TOUTES LES INFORMATIONS EN FRANÇAIS - Ne jamais laisser de texte en anglais
 
 TEXTE À ANALYSER (analyse uniquement ce contenu) :
 {text}
@@ -211,6 +253,12 @@ RÈGLES DE RECHERCHE PRÉCISES :
 - Cherche EXACTEMENT ces mots-clés : dimensions, poids, puissance, tension, fréquence, décibels, classe énergétique, garantie, certification, norme, accessoires, compatibilité
 - Si tu ne trouves PAS l'information dans le texte, mets ""
 - Ne génère JAMAIS de contenu qui n'est pas explicitement dans le texte fourni
+
+⚠️ INSTRUCTION FINALE OBLIGATOIRE :
+- RÉPONDS UNIQUEMENT EN FRANÇAIS
+- TRADUIS TOUTES LES INFORMATIONS EN FRANÇAIS
+- MÊME SI LE DOCUMENT SOURCE EST EN ANGLAIS, RÉPONDS EN FRANÇAIS
+- NE LAISSE AUCUN TEXTE EN ANGLAIS DANS TA RÉPONSE
 
 RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
         return prompt
@@ -290,11 +338,25 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
             "fournisseur de chaleur", "htr 3000", "système de chauffage à inertie"
         ]
         
+        # Mots-clés anglais courants à détecter
+        english_keywords = [
+            "refrigerator", "freezer", "dishwasher", "washing machine", "oven", "microwave",
+            "side by side", "water dispenser", "ice dispenser", "energy class", "stainless steel",
+            "touch screen", "led display", "warranty", "years", "voltage", "frequency",
+            "power consumption", "capacity", "dimensions", "weight", "features", "certifications"
+        ]
+        
         def is_suspicious(value: str) -> bool:
             if not value:
                 return False
             value_lower = value.lower()
             return any(keyword in value_lower for keyword in suspicious_keywords)
+        
+        def contains_english(value: str) -> bool:
+            if not value:
+                return False
+            value_lower = value.lower()
+            return any(keyword in value_lower for keyword in english_keywords)
         
         def validate_in_text(value: str, text: str) -> bool:
             """Vérifie si une valeur existe dans le texte original"""
@@ -315,12 +377,17 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
                 return normalized_value in normalized_text
         
         validated_data = {}
+        english_detected = False
         
         for key, value in data.items():
             if isinstance(value, str):
                 if is_suspicious(value) or not validate_in_text(value, original_text):
                     validated_data[key] = ""
                     logger.warning(f"Valeur suspecte supprimée pour {key}: {value}")
+                elif contains_english(value):
+                    validated_data[key] = value  # Garder la valeur mais logger l'alerte
+                    logger.warning(f"TEXTE ANGLAIS DÉTECTÉ pour {key}: {value}")
+                    english_detected = True
                 else:
                     validated_data[key] = value
                     
@@ -328,6 +395,9 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
                 validated_list = []
                 for item in value:
                     if isinstance(item, str) and not is_suspicious(item) and validate_in_text(item, original_text):
+                        if contains_english(item):
+                            logger.warning(f"TEXTE ANGLAIS DÉTECTÉ pour {key}: {item}")
+                            english_detected = True
                         validated_list.append(item)
                 validated_data[key] = validated_list
                 
@@ -336,6 +406,9 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
                 for subkey, subvalue in value.items():
                     if isinstance(subvalue, str):
                         if not is_suspicious(subvalue) and validate_in_text(subvalue, original_text):
+                            if contains_english(subvalue):
+                                logger.warning(f"TEXTE ANGLAIS DÉTECTÉ pour {key}.{subkey}: {subvalue}")
+                                english_detected = True
                             validated_dict[subkey] = subvalue
                         else:
                             validated_dict[subkey] = ""
@@ -345,9 +418,12 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
             else:
                 validated_data[key] = value
         
+        if english_detected:
+            logger.error("⚠️  RÉPONSE EN ANGLAIS DÉTECTÉE - Le prompt doit être renforcé")
+        
         return validated_data
 
-    async def analyze_with_ollama(self, text: str) -> Dict[str, Any]:
+    async def analyze_with_ollama(self, text: str, session_id: str = None, output_path: Path = None) -> Dict[str, Any]:
         """Analyse le texte avec Ollama pour extraire les informations produit"""
         logger.info(f"Début de l'analyse avec Ollama, texte à analyser: {len(text)} caractères")
         
@@ -392,16 +468,24 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
                         # Validation des données
                         validated_data = self.validate_extracted_data(data, text)
                         
+                        # Sauvegarder la réponse du modèle si session_id et output_path sont fournis
+                        if session_id and output_path:
+                            await self.save_model_response(session_id, prompt, json_str, validated_data, output_path)
+                        
                         logger.info(f"Données extraites et validées: {len(validated_data)} champs")
                         return validated_data
                         
                     except Exception as e:
                         logger.error(f"Erreur lors du parsing: {str(e)}")
                         
+                        # Sauvegarder même en cas d'erreur si session_id et output_path sont fournis
+                        if session_id and output_path:
+                            await self.save_model_response(session_id, prompt, json_str, {"error": str(e)}, output_path)
+                        
                         # Si c'est la dernière tentative, essayer avec un prompt simplifié
                         if retries == self.max_retries - 1:
                             logger.info("Tentative avec un prompt simplifié...")
-                            return await self.analyze_with_simple_prompt(text)
+                            return await self.analyze_with_simple_prompt(text, session_id, output_path)
                         
                         retries += 1
                         continue
@@ -422,18 +506,21 @@ RÉPONDS UNIQUEMENT AVEC LE JSON, SANS COMMENTAIRES NI EXPLICATIONS."""
                 logger.error(f"Erreur lors de l'analyse: {str(e)}", exc_info=True)
                 raise Exception(f"Erreur lors de l'analyse: {str(e)}")
 
-    async def analyze_with_simple_prompt(self, text: str) -> Dict[str, Any]:
+    async def analyze_with_simple_prompt(self, text: str, session_id: str = None, output_path: Path = None) -> Dict[str, Any]:
         """Analyse avec un prompt simplifié en cas d'échec"""
-        simple_prompt = f"""Extrait les informations produit de ce texte et réponds avec un JSON simple:
+        simple_prompt = f"""Extrait les informations produit de ce texte et réponds avec un JSON simple en FRANÇAIS :
+
+IMPORTANT : RÉPONDS UNIQUEMENT EN FRANÇAIS, MÊME SI LE TEXTE EST EN ANGLAIS
+
 {{
-    "product_name": "nom du produit",
-    "brand": "marque",
-    "description": "description courte"
+    "product_name": "nom du produit en français",
+    "brand": "marque en français",
+    "description": "description courte en français"
 }}
 
 Texte: {text[:2000]}
 
-JSON:"""
+JSON en français:"""
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -453,11 +540,23 @@ JSON:"""
                 parsed_json = json.loads(json_str)
                 
                 # Créer une structure complète avec les données disponibles
-                return self.create_fallback_structure(parsed_json)
+                validated_data = self.create_fallback_structure(parsed_json)
+                
+                # Sauvegarder la réponse du modèle si session_id et output_path sont fournis
+                if session_id and output_path:
+                    await self.save_model_response(session_id, simple_prompt, json_str, validated_data, output_path)
+                
+                return validated_data
                 
         except Exception as e:
             logger.error(f"Erreur avec le prompt simplifié: {str(e)}")
-            return self.create_fallback_structure({})
+            fallback_data = self.create_fallback_structure({})
+            
+            # Sauvegarder même en cas d'erreur si session_id et output_path sont fournis
+            if session_id and output_path:
+                await self.save_model_response(session_id, simple_prompt, "Erreur lors de l'analyse", fallback_data, output_path)
+            
+            return fallback_data
 
     def create_fallback_structure(self, partial_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """Crée une structure complète avec des données partielles"""
@@ -553,7 +652,7 @@ JSON:"""
         
         return merged
 
-    async def analyze_pdf(self, pdf_path: Path) -> Dict[str, Any]:
+    async def analyze_pdf(self, pdf_path: Path, session_id: str = None, output_path: Path = None) -> Dict[str, Any]:
         """Analyse complète d'un fichier PDF"""
         logger.info(f"=== DÉBUT ANALYSE PDF: {pdf_path} ===")
         
@@ -570,7 +669,7 @@ JSON:"""
             
             # Si le texte est court, analyser directement
             if len(text) <= 4000:
-                result = await self.analyze_with_ollama(text)
+                result = await self.analyze_with_ollama(text, session_id, output_path)
             else:
                 # Découpage en segments
                 segments = self.split_text(text, 4000)
@@ -580,7 +679,7 @@ JSON:"""
                 results = []
                 for idx, segment in enumerate(segments):
                     logger.info(f"Analyse du segment {idx+1}/{len(segments)}")
-                    res = await self.analyze_with_ollama(segment)
+                    res = await self.analyze_with_ollama(segment, session_id, output_path)
                     results.append(res)
                 
                 # Fusion des résultats
